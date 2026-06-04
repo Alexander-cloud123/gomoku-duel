@@ -18,6 +18,9 @@ function init() {
     net = new GameNet();
     ai = new AIAssistant();
 
+    // 暴露给测试环境
+    window.__gomoku = { board, game, net, ai, Board, BLACK, WHITE, SIZE };
+
     // 棋盘点击
     board.onCellClick = (x, y) => {
         if (!game.isMyTurn()) return;

@@ -413,6 +413,10 @@ body {
     z-index: 1000;
 }
 
+.dialog-overlay[hidden] {
+    display: none;
+}
+
 .dialog-card {
     background: var(--card-bg);
     border-radius: 16px;
