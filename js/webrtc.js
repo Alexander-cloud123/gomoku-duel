@@ -20,7 +20,8 @@ export class GameNet {
             this.peer = new Peer(peerId, {
                 config: {
                     iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-                }
+                },
+                serialization: 'json'
             });
 
             this.peer.on('open', () => {
@@ -44,12 +45,13 @@ export class GameNet {
             this.peer = new Peer({
                 config: {
                     iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-                }
+                },
+                serialization: 'json'
             });
 
             this.peer.on('open', () => {
                 const peerId = createRoomId(roomCode);
-                this.conn = this.peer.connect(peerId, { reliable: true });
+                this.conn = this.peer.connect(peerId, { reliable: true, serialization: 'json' });
 
                 this.conn.on('open', () => {
                     this._setupConnection();
