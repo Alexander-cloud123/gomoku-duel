@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>五子棋 · 双人联机</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- 状态 1：首页 -->
+        <section id="page-home" class="page active">
+            <div class="home-card">
+                <h1 class="home-title">五子棋 · 双人联机</h1>
+                <p class="home-subtitle">WebRTC 点对点对战，房主独享 AI 辅助</p>
+                <button id="btn-create" class="btn btn-primary">创建房间</button>
+                <button id="btn-join" class="btn btn-secondary">加入房间</button>
+            </div>
+        </section>
+
+        <!-- 状态 2：房间等待 -->
+        <section id="page-waiting" class="page">
+            <div class="waiting-card">
+                <h2>等待对手加入...</h2>
+                <div class="room-code-wrapper">
+                    <span class="room-label">房间号</span>
+                    <div id="room-code" class="room-code">------</div>
+                </div>
+                <button id="btn-copy" class="btn btn-primary">一键复制</button>
+                <p class="waiting-hint">把房间号发给室友，对方点击"加入房间"输入即可</p>
+                <div class="waiting-dots">
+                    <span></span><span></span><span></span>
+                </div>
+                <button id="btn-cancel-wait" class="btn btn-danger-text">取消</button>
+            </div>
+        </section>
+
+        <!-- 状态 3：加入房间 -->
+        <section id="page-join" class="page">
+            <div class="join-card">
+                <h2>加入房间</h2>
+                <input id="input-room" type="text" class="input-room" placeholder="输入 6 位房间号" maxlength="6" autocomplete="off">
+                <button id="btn-join-confirm" class="btn btn-primary">连接</button>
+                <button id="btn-cancel-join" class="btn btn-danger-text">返回</button>
+            </div>
+        </section>
+
+        <!-- 状态 4：对局中 -->
+        <section id="page-game" class="page">
+            <header class="game-header">
+                <span id="game-room-name" class="game-room-name">房间 ------</span>
+                <span id="game-conn-status" class="game-conn-status">已连接</span>
+            </header>
+            <main class="game-main">
+                <div class="board-wrapper">
+                    <canvas id="board" width="600" height="600"></canvas>
+                    <div id="turn-indicator" class="turn-indicator">轮到你落子</div>
+                </div>
+                <aside id="sidebar" class="sidebar">
+                    <!-- AI 辅助面板（仅房主可见） -->
+                    <div id="ai-panel" class="ai-panel" hidden>
+                        <h3 class="sidebar-title">AI 辅助</h3>
+                        <div class="ai-section">
+                            <span class="ai-label">推荐位置</span>
+                            <span id="ai-recommend" class="ai-value">--</span>
+                        </div>
+                        <div class="ai-section">
+                            <span class="ai-label">胜率</span>
+                            <div class="winrate-bar">
+                                <div id="winrate-fill" class="winrate-fill" style="width:50%"></div>
+                            </div>
+                            <span id="winrate-text" class="ai-value">50%</span>
+                        </div>
+                        <div class="ai-section">
+                            <span class="ai-label">威胁</span>
+                            <span id="ai-threat" class="ai-value ai-safe">安全</span>
+                        </div>
+                    </div>
+                    <!-- 操作面板 -->
+                    <div class="op-panel">
+                        <h3 class="sidebar-title">操作</h3>
+                        <button id="btn-undo" class="btn btn-small">悔棋</button>
+                        <button id="btn-draw" class="btn btn-small">和棋</button>
+                        <button id="btn-surrender" class="btn btn-small btn-danger">认输</button>
+                    </div>
+                </aside>
+            </main>
+            <footer class="game-footer">
+                <span class="footer-label">走子历史</span>
+                <span id="move-history" class="move-history"></span>
+            </footer>
+        </section>
+
+        <!-- 对话框（悔棋/和棋请求） -->
+        <div id="dialog-overlay" class="dialog-overlay" hidden>
+            <div class="dialog-card">
+                <p id="dialog-message" class="dialog-message"></p>
+                <div class="dialog-buttons">
+                    <button id="dialog-yes" class="btn btn-primary btn-small">同意</button>
+                    <button id="dialog-no" class="btn btn-danger btn-small">拒绝</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 结果弹窗 -->
+        <div id="result-overlay" class="dialog-overlay" hidden>
+            <div class="dialog-card">
+                <p id="result-message" class="result-message"></p>
+                <div class="dialog-buttons">
+                    <button id="btn-restart" class="btn btn-primary btn-small">再来一局</button>
+                    <button id="btn-exit" class="btn btn-danger btn-small">退出房间</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PeerJS 库 -->
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
