@@ -162,8 +162,30 @@ export class Board {
             ctx.fillText(String(i + 1), p - 18, p + i * cs);
         }
 
-        // AI 提示：威胁位置
-        if (this.aiHints && this.aiHints.threats) {
+        // AI 提示：作弊模式 - 显示三个威胁位置
+        if (this.aiHints && this.aiHints.topThreats) {
+            const colors = [
+                'rgba(255, 0, 0, 0.5)',      // 红色 - 最大威胁
+                'rgba(255, 165, 0, 0.4)',    // 橙色
+                'rgba(255, 255, 0, 0.35)'    // 黄色
+            ];
+            for (let i = 0; i < this.aiHints.topThreats.length; i++) {
+                const t = this.aiHints.topThreats[i];
+                ctx.fillStyle = colors[i];
+                ctx.beginPath();
+                ctx.arc(p + t.x * cs, p + t.y * cs, cs * 0.4, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 标注数字
+                ctx.fillStyle = '#FFF';
+                ctx.font = 'bold 14px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText((i + 1).toString(), p + t.x * cs, p + t.y * cs);
+            }
+        }
+        // AI 提示：正常模式 - 威胁位置
+        else if (this.aiHints && this.aiHints.threats) {
             for (const t of this.aiHints.threats) {
                 ctx.fillStyle = 'rgba(255, 68, 68, 0.35)';
                 ctx.beginPath();

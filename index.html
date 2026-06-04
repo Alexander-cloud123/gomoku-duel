@@ -57,23 +57,31 @@
                     <div id="turn-indicator" class="turn-indicator">轮到你落子</div>
                 </div>
                 <aside id="sidebar" class="sidebar">
-                    <!-- AI 辅助面板（仅房主可见） -->
+                    <!-- AI 辅助面板 -->
                     <div id="ai-panel" class="ai-panel" hidden>
-                        <h3 class="sidebar-title">AI 辅助</h3>
-                        <div class="ai-section">
-                            <span class="ai-label">推荐位置</span>
-                            <span id="ai-recommend" class="ai-value">--</span>
+                        <div class="ai-header">
+                            <h3 class="sidebar-title">AI 辅助</h3>
+                            <label class="ai-toggle">
+                                <input type="checkbox" id="ai-toggle" checked>
+                                <span class="ai-toggle-slider"></span>
+                            </label>
                         </div>
-                        <div class="ai-section">
-                            <span class="ai-label">胜率</span>
-                            <div class="winrate-bar">
-                                <div id="winrate-fill" class="winrate-fill" style="width:50%"></div>
+                        <div id="ai-content">
+                            <div class="ai-section">
+                                <span class="ai-label">推荐位置</span>
+                                <span id="ai-recommend" class="ai-value">--</span>
                             </div>
-                            <span id="winrate-text" class="ai-value">50%</span>
-                        </div>
-                        <div class="ai-section">
-                            <span class="ai-label">威胁</span>
-                            <span id="ai-threat" class="ai-value ai-safe">安全</span>
+                            <div class="ai-section">
+                                <span class="ai-label">胜率</span>
+                                <div class="winrate-bar">
+                                    <div id="winrate-fill" class="winrate-fill" style="width:50%"></div>
+                                </div>
+                                <span id="winrate-text" class="ai-value">50%</span>
+                            </div>
+                            <div class="ai-section">
+                                <span class="ai-label">威胁</span>
+                                <span id="ai-threat" class="ai-value ai-safe">安全</span>
+                            </div>
                         </div>
                     </div>
                     <!-- 操作面板 -->

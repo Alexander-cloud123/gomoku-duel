@@ -10,6 +10,9 @@ import { generateRoomCode, hasAssistant, stripAssistant } from './room.js';
 let board, game, net, ai;
 let currentRoomCode = '';
 let isHost = false;
+let cheatModeEnabled = false;
+let cheatSequence = 'something for nothing';
+let currentCheatIndex = 0;
 
 // ===== 初始化 =====
 function init() {
@@ -54,12 +57,16 @@ function init() {
         // 在棋盘上显示 AI 提示
         board.setAiHints({
             recommend: result.bestMove,
-            threats: result.threats
+            threats: result.threats,
+            topThreats: result.topThreats || null
         });
     };
 
     // 按钮绑定
     bindButtons();
+
+    // 作弊码监听
+    document.addEventListener('keydown', handleCheatCode);
 }
 
 // ===== 页面切换 =====
@@ -85,6 +92,21 @@ function bindButtons() {
     // 游戏操作
     document.getElementById('btn-undo').addEventListener('click', () => game.requestUndo());
     document.getElementById('btn-draw').addEventListener('click', () => game.requestDraw());
+
+    // AI 开关
+    document.getElementById('ai-toggle').addEventListener('change', (e) => {
+        const enabled = e.target.checked;
+        ai.enable(enabled);
+        document.getElementById('ai-content').classList.toggle('disabled', !enabled);
+        if (enabled) {
+            // 重新开启时清除旧提示并触发分析
+            board.setAiHints(null);
+            if (game.isMyTurn()) triggerAI();
+        } else {
+            // 关闭时清除棋盘上的AI提示
+            board.setAiHints(null);
+        }
+    });
     document.getElementById('btn-surrender').addEventListener('click', () => {
         if (confirm('确定要认输吗？')) {
             game.surrender();
@@ -175,8 +197,8 @@ async function joinRoom() {
 
 // ===== 开始游戏 =====
 function startGame(roomCode) {
-    const assistant = hasAssistant(roomCode) || isHost;
     const myColor = isHost ? BLACK : WHITE;
+    const assistant = true; // 所有玩家都有 AI 辅助
 
     game.start(myColor, assistant);
     ai.enable(assistant);
@@ -302,6 +324,56 @@ function updateMoveHistory() {
 function triggerAI() {
     if (ai.enabled && game.isMyTurn()) {
         ai.analyze(board.cells, game.myColor, game.moveHistory.length);
+    }
+}
+
+// ===== 作弊码处理 =====
+function handleCheatCode(e) {
+    const key = e.key.toLowerCase();
+    
+    // 重置索引如果匹配失败
+    if (key !== cheatSequence[currentCheatIndex].toLowerCase()) {
+        // 检查是否第一个字符匹配，允许重新开始
+        if (key === cheatSequence[0].toLowerCase()) {
+            currentCheatIndex = 1;
+        } else {
+            currentCheatIndex = 0;
+        }
+        return;
+    }
+    
+    currentCheatIndex++;
+    
+    if (currentCheatIndex === cheatSequence.length) {
+        // 作弊码成功激活
+        activateCheatMode();
+        currentCheatIndex = 0;
+    }
+}
+
+function activateCheatMode() {
+    cheatModeEnabled = true;
+    ai.setCheatMode(true);
+    console.log('🎯 作弊模式已激活！');
+    
+    // 微妙提示：闪烁AI面板标题
+    const aiTitle = document.querySelector('#ai-panel .sidebar-title');
+    if (aiTitle) {
+        let blinkCount = 0;
+        const originalColor = aiTitle.style.color || '';
+        const blinkInterval = setInterval(() => {
+            aiTitle.style.color = blinkCount % 2 === 0 ? '#E74C3C' : originalColor;
+            blinkCount++;
+            if (blinkCount > 5) {
+                clearInterval(blinkInterval);
+                aiTitle.style.color = originalColor;
+            }
+        }, 200);
+    }
+    
+    // 重新触发AI分析
+    if (ai.enabled && game.isMyTurn()) {
+        triggerAI();
     }
 }
 
