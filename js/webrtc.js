@@ -28,8 +28,8 @@ export class GameNet {
                 this.peer.on('connection', (conn) => {
                     this.conn = conn;
                     this._setupConnection();
-                    resolve();
                 });
+                resolve();
             });
 
             this.peer.on('error', (err) => {

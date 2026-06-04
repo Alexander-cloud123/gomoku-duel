@@ -39,6 +39,12 @@ function init() {
 
     // 网络事件
     net.onMessage = (data) => handleNetMessage(data);
+    net.onConnected = () => {
+        // 房主端：对手连接后自动开始游戏
+        if (isHost) {
+            startGame(currentRoomCode);
+        }
+    };
     net.onDisconnected = () => handleDisconnect();
     net.onError = (err) => handleError(err);
 
@@ -109,11 +115,12 @@ async function createRoom() {
     isHost = true;
 
     document.getElementById('room-code').textContent = code;
+    showPage('page-waiting');
 
     try {
         await net.createRoom(code);
-        showPage('page-waiting');
     } catch (err) {
+        showPage('page-home');
         alert('创建房间失败：' + err.message);
     }
 }
