@@ -150,6 +150,9 @@ function selectMode(mode) {
 
 // ===== 重建游戏对象（根据模式） =====
 function rebuildGameObjects() {
+    // 销毁旧 Board 的事件监听器，防止重复绑定
+    if (board && board.destroy) board.destroy();
+
     const canvas = document.getElementById('board');
     const size = currentGameMode === 'go' ? 19 : 15;
 

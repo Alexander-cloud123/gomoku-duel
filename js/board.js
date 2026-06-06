@@ -25,14 +25,15 @@ export class Board {
     }
 
     _bindEvents() {
-        this.canvas.addEventListener('click', (e) => {
+        // 保存监听器引用，以便后续销毁
+        this._clickHandler = (e) => {
             const { col, row, nearEnough } = this._eventToGrid(e);
             if (nearEnough && col >= 0 && col < this.size && row >= 0 && row < this.size) {
                 if (this.onCellClick) this.onCellClick(col, row);
             }
-        });
+        };
 
-        this.canvas.addEventListener('mousemove', (e) => {
+        this._moveHandler = (e) => {
             const { col, row, nearEnough } = this._eventToGrid(e);
 
             if (nearEnough && col >= 0 && col < this.size && row >= 0 && row < this.size && this.cells[row][col] === EMPTY) {
@@ -41,12 +42,22 @@ export class Board {
                 this._hoverPos = null;
             }
             this.render();
-        });
+        };
 
-        this.canvas.addEventListener('mouseleave', () => {
+        this._leaveHandler = () => {
             this._hoverPos = null;
             this.render();
-        });
+        };
+
+        this.canvas.addEventListener('click', this._clickHandler);
+        this.canvas.addEventListener('mousemove', this._moveHandler);
+        this.canvas.addEventListener('mouseleave', this._leaveHandler);
+    }
+
+    destroy() {
+        if (this._clickHandler) this.canvas.removeEventListener('click', this._clickHandler);
+        if (this._moveHandler) this.canvas.removeEventListener('mousemove', this._moveHandler);
+        if (this._leaveHandler) this.canvas.removeEventListener('mouseleave', this._leaveHandler);
     }
 
     // 将鼠标事件转换为棋盘坐标，并判断是否足够靠近交叉点

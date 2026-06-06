@@ -59,6 +59,10 @@ body {
     outline: none;
 }
 
+.btn[hidden] {
+    display: none !important;
+}
+
 .btn:hover {
     transform: translateY(-1px);
 }
