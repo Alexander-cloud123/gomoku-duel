@@ -26,31 +26,16 @@ export class Board {
 
     _bindEvents() {
         this.canvas.addEventListener('click', (e) => {
-            const rect = this.canvas.getBoundingClientRect();
-            const scaleX = this.canvas.width / rect.width;
-            const scaleY = this.canvas.height / rect.height;
-            const x = (e.clientX - rect.left) * scaleX;
-            const y = (e.clientY - rect.top) * scaleY;
-
-            const col = Math.round((x - this._padding) / this._cellSize);
-            const row = Math.round((y - this._padding) / this._cellSize);
-
-            if (col >= 0 && col < this.size && row >= 0 && row < this.size) {
+            const { col, row, nearEnough } = this._eventToGrid(e);
+            if (nearEnough && col >= 0 && col < this.size && row >= 0 && row < this.size) {
                 if (this.onCellClick) this.onCellClick(col, row);
             }
         });
 
         this.canvas.addEventListener('mousemove', (e) => {
-            const rect = this.canvas.getBoundingClientRect();
-            const scaleX = this.canvas.width / rect.width;
-            const scaleY = this.canvas.height / rect.height;
-            const x = (e.clientX - rect.left) * scaleX;
-            const y = (e.clientY - rect.top) * scaleY;
+            const { col, row, nearEnough } = this._eventToGrid(e);
 
-            const col = Math.round((x - this._padding) / this._cellSize);
-            const row = Math.round((y - this._padding) / this._cellSize);
-
-            if (col >= 0 && col < this.size && row >= 0 && row < this.size && this.cells[row][col] === EMPTY) {
+            if (nearEnough && col >= 0 && col < this.size && row >= 0 && row < this.size && this.cells[row][col] === EMPTY) {
                 this._hoverPos = { x: col, y: row };
             } else {
                 this._hoverPos = null;
@@ -62,6 +47,29 @@ export class Board {
             this._hoverPos = null;
             this.render();
         });
+    }
+
+    // 将鼠标事件转换为棋盘坐标，并判断是否足够靠近交叉点
+    _eventToGrid(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+        const px = (e.clientX - rect.left) * scaleX;
+        const py = (e.clientY - rect.top) * scaleY;
+
+        const col = Math.round((px - this._padding) / this._cellSize);
+        const row = Math.round((py - this._padding) / this._cellSize);
+
+        // 计算点击位置到最近交叉点的像素距离
+        const snapX = this._padding + col * this._cellSize;
+        const snapY = this._padding + row * this._cellSize;
+        const dist = Math.sqrt((px - snapX) ** 2 + (py - snapY) ** 2);
+
+        // 只有距离在半个格子半径内才算有效点击
+        const threshold = this._cellSize * 0.45;
+        const nearEnough = dist <= threshold;
+
+        return { col, row, nearEnough };
     }
 
     place(x, y, color) {
