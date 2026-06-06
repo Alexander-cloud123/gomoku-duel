@@ -1,18 +1,17 @@
-// ai-worker.js - AI 搜索线程（Minimax + Alpha-Beta）
+// ai-worker.js - AI 搜索线程（Minimax + Alpha-Beta）— 五子棋专用
 
 import { evaluateBoard, getCandidateMoves, scoreToWinRate, findThreats, EMPTY, BLACK, WHITE, SCORES } from './ai-eval.js';
 
-const SIZE = 15;
-
 self.onmessage = function(e) {
     const { cells, myColor, depth } = e.data;
+    const SIZE = cells.length;
     const opp = myColor === BLACK ? WHITE : BLACK;
 
-    const result = searchBestMove(cells, myColor, depth);
+    const result = searchBestMove(cells, myColor, depth, SIZE);
     self.postMessage(result);
 };
 
-function searchBestMove(cells, myColor, depth) {
+function searchBestMove(cells, myColor, depth, SIZE) {
     const candidates = getCandidateMoves(cells);
     const opp = myColor === BLACK ? WHITE : BLACK;
 
@@ -20,7 +19,6 @@ function searchBestMove(cells, myColor, depth) {
         return { bestMove: null, winRate: 50, threats: [] };
     }
 
-    // 先排序：评估每个候选位的即时得分，优先搜高分位
     const scored = candidates.map(move => {
         cells[move.y][move.x] = myColor;
         const s = evaluateBoard(cells, myColor);
@@ -29,7 +27,6 @@ function searchBestMove(cells, myColor, depth) {
     });
     scored.sort((a, b) => b.score - a.score);
 
-    // 只取前 15 个候选
     const topCandidates = scored.slice(0, 15);
 
     let bestMove = topCandidates[0];
@@ -38,8 +35,7 @@ function searchBestMove(cells, myColor, depth) {
     for (const move of topCandidates) {
         cells[move.y][move.x] = myColor;
 
-        // 即时胜利检查
-        if (checkWinAt(cells, move.x, move.y, myColor)) {
+        if (checkWinAt(cells, move.x, move.y, myColor, SIZE)) {
             cells[move.y][move.x] = EMPTY;
             return {
                 bestMove: move,
@@ -48,7 +44,7 @@ function searchBestMove(cells, myColor, depth) {
             };
         }
 
-        const score = minimax(cells, depth - 1, false, myColor, -Infinity, Infinity);
+        const score = minimax(cells, depth - 1, false, myColor, -Infinity, Infinity, SIZE);
         cells[move.y][move.x] = EMPTY;
 
         if (score > bestScore) {
@@ -63,7 +59,7 @@ function searchBestMove(cells, myColor, depth) {
     return { bestMove, winRate, threats };
 }
 
-function minimax(cells, depth, isMaximizing, myColor, alpha, beta) {
+function minimax(cells, depth, isMaximizing, myColor, alpha, beta, SIZE) {
     const opp = myColor === BLACK ? WHITE : BLACK;
 
     if (depth === 0) {
@@ -73,7 +69,6 @@ function minimax(cells, depth, isMaximizing, myColor, alpha, beta) {
     const currentColor = isMaximizing ? myColor : opp;
     const candidates = getCandidateMoves(cells);
 
-    // 限制候选数
     const limit = isMaximizing ? 12 : 10;
     const topMoves = getTopMoves(cells, candidates, currentColor, limit);
 
@@ -86,12 +81,12 @@ function minimax(cells, depth, isMaximizing, myColor, alpha, beta) {
         for (const move of topMoves) {
             cells[move.y][move.x] = currentColor;
 
-            if (checkWinAt(cells, move.x, move.y, currentColor)) {
+            if (checkWinAt(cells, move.x, move.y, currentColor, SIZE)) {
                 cells[move.y][move.x] = EMPTY;
                 return SCORES.FIVE;
             }
 
-            const eval_ = minimax(cells, depth - 1, false, myColor, alpha, beta);
+            const eval_ = minimax(cells, depth - 1, false, myColor, alpha, beta, SIZE);
             cells[move.y][move.x] = EMPTY;
 
             maxEval = Math.max(maxEval, eval_);
@@ -104,12 +99,12 @@ function minimax(cells, depth, isMaximizing, myColor, alpha, beta) {
         for (const move of topMoves) {
             cells[move.y][move.x] = currentColor;
 
-            if (checkWinAt(cells, move.x, move.y, currentColor)) {
+            if (checkWinAt(cells, move.x, move.y, currentColor, SIZE)) {
                 cells[move.y][move.x] = EMPTY;
                 return -SCORES.FIVE;
             }
 
-            const eval_ = minimax(cells, depth - 1, true, myColor, alpha, beta);
+            const eval_ = minimax(cells, depth - 1, true, myColor, alpha, beta, SIZE);
             cells[move.y][move.x] = EMPTY;
 
             minEval = Math.min(minEval, eval_);
@@ -131,7 +126,7 @@ function getTopMoves(cells, candidates, color, limit) {
     return scored.slice(0, limit);
 }
 
-function checkWinAt(cells, x, y, color) {
+function checkWinAt(cells, x, y, color, SIZE) {
     const directions = [[1, 0], [0, 1], [1, 1], [1, -1]];
     for (const [dx, dy] of directions) {
         let count = 1;

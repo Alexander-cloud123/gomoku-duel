@@ -13,9 +13,9 @@ export class GameNet {
         this._heartbeatTimer = null;
     }
 
-    async createRoom(roomCode) {
+    async createRoom(roomCode, gameMode = 'gomoku') {
         return new Promise((resolve, reject) => {
-            const peerId = createRoomId(roomCode);
+            const peerId = createRoomId(roomCode, gameMode);
 
             this.peer = new Peer(peerId, {
                 config: {
@@ -40,7 +40,7 @@ export class GameNet {
         });
     }
 
-    async joinRoom(roomCode) {
+    async joinRoom(roomCode, gameMode = 'gomoku') {
         return new Promise((resolve, reject) => {
             this.peer = new Peer({
                 config: {
@@ -50,7 +50,7 @@ export class GameNet {
             });
 
             this.peer.on('open', () => {
-                const peerId = createRoomId(roomCode);
+                const peerId = createRoomId(roomCode, gameMode);
                 this.conn = this.peer.connect(peerId, { reliable: true, serialization: 'json' });
 
                 this.conn.on('open', () => {

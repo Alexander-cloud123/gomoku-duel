@@ -1,10 +1,10 @@
-// main.js - 入口：初始化、状态切换、事件绑定
+// main.js - 入口：初始化、状态切换、事件绑定（支持五子棋和围棋）
 
-import { Board, BLACK, WHITE, SIZE } from './board.js';
+import { Board, BLACK, WHITE } from './board.js';
 import { Game } from './game.js';
 import { GameNet } from './webrtc.js';
 import { AIAssistant, updateAIPanel } from './ai.js';
-import { generateRoomCode, hasAssistant, stripAssistant } from './room.js';
+import { generateRoomCode, hasAssistant, stripAssistant, createRoomId } from './room.js';
 
 // ===== 全局状态 =====
 let board, game, net, ai;
@@ -13,22 +13,25 @@ let isHost = false;
 let cheatModeEnabled = false;
 let cheatSequence = 'something for nothing';
 let currentCheatIndex = 0;
+let currentGameMode = 'gomoku'; // 'gomoku' 或 'go'
 
 // ===== 初始化 =====
 function init() {
-    board = new Board(document.getElementById('board'));
-    game = new Game(board);
+    // 默认初始化五子棋（后面会根据模式重建）
+    board = new Board(document.getElementById('board'), 15, 'gomoku');
+    game = new Game(board, 'gomoku');
     net = new GameNet();
     ai = new AIAssistant();
 
     // 暴露给测试环境
-    window.__gomoku = { board, game, net, ai, Board, BLACK, WHITE, SIZE };
+    window.__gomoku = { board, game, net, ai, Board, BLACK, WHITE, currentGameMode };
 
     // 棋盘点击
     board.onCellClick = (x, y) => {
         if (!game.isMyTurn()) return;
         if (game.placeStone(x, y)) {
             updateMoveHistory();
+            updateGoCaptures();
             triggerAI();
         }
     };
@@ -39,11 +42,11 @@ function init() {
     game.onMoveSent = (msg) => net.send(msg);
     game.onUndoRequest = (msg) => net.send(msg);
     game.onDrawRequest = (msg) => net.send(msg);
+    game.onGameEnd = (score) => handleGameEnd(score);
 
     // 网络事件
     net.onMessage = (data) => handleNetMessage(data);
     net.onConnected = () => {
-        // 房主端：对手连接后自动开始游戏
         if (isHost) {
             startGame(currentRoomCode);
         }
@@ -53,8 +56,7 @@ function init() {
 
     // AI 事件
     ai.onResult = (result) => {
-        updateAIPanel(result, game.myColor);
-        // 在棋盘上显示 AI 提示
+        updateAIPanel(result, game.myColor, currentGameMode);
         board.setAiHints({
             recommend: result.bestMove,
             threats: result.threats,
@@ -77,6 +79,10 @@ function showPage(pageId) {
 
 // ===== 按钮绑定 =====
 function bindButtons() {
+    // 模式选择
+    document.getElementById('btn-mode-gomoku').addEventListener('click', () => selectMode('gomoku'));
+    document.getElementById('btn-mode-go').addEventListener('click', () => selectMode('go'));
+
     // 首页
     document.getElementById('btn-create').addEventListener('click', createRoom);
     document.getElementById('btn-join').addEventListener('click', () => showPage('page-join'));
@@ -92,6 +98,12 @@ function bindButtons() {
     // 游戏操作
     document.getElementById('btn-undo').addEventListener('click', () => game.requestUndo());
     document.getElementById('btn-draw').addEventListener('click', () => game.requestDraw());
+    document.getElementById('btn-pass').addEventListener('click', () => {
+        if (game.pass()) {
+            updateMoveHistory();
+            triggerAI();
+        }
+    });
 
     // AI 开关
     document.getElementById('ai-toggle').addEventListener('change', (e) => {
@@ -99,14 +111,13 @@ function bindButtons() {
         ai.enable(enabled);
         document.getElementById('ai-content').classList.toggle('disabled', !enabled);
         if (enabled) {
-            // 重新开启时清除旧提示并触发分析
             board.setAiHints(null);
             if (game.isMyTurn()) triggerAI();
         } else {
-            // 关闭时清除棋盘上的AI提示
             board.setAiHints(null);
         }
     });
+
     document.getElementById('btn-surrender').addEventListener('click', () => {
         if (confirm('确定要认输吗？')) {
             game.surrender();
@@ -130,17 +141,67 @@ function bindButtons() {
     document.getElementById('dialog-no').addEventListener('click', () => handleDialogResponse(false));
 }
 
+// ===== 模式选择 =====
+function selectMode(mode) {
+    currentGameMode = mode;
+    document.getElementById('btn-mode-gomoku').classList.toggle('active', mode === 'gomoku');
+    document.getElementById('btn-mode-go').classList.toggle('active', mode === 'go');
+}
+
+// ===== 重建游戏对象（根据模式） =====
+function rebuildGameObjects() {
+    const canvas = document.getElementById('board');
+    const size = currentGameMode === 'go' ? 19 : 15;
+
+    board = new Board(canvas, size, currentGameMode);
+    game = new Game(board, currentGameMode);
+    ai.setGameMode(currentGameMode);
+
+    // 重新绑定事件
+    board.onCellClick = (x, y) => {
+        if (!game.isMyTurn()) return;
+        if (game.placeStone(x, y)) {
+            updateMoveHistory();
+            updateGoCaptures();
+            triggerAI();
+        }
+    };
+
+    game.onWin = (color) => handleWin(color);
+    game.onDraw = () => handleDraw();
+    game.onMoveSent = (msg) => net.send(msg);
+    game.onUndoRequest = (msg) => net.send(msg);
+    game.onDrawRequest = (msg) => net.send(msg);
+    game.onGameEnd = (score) => handleGameEnd(score);
+
+    ai.onResult = (result) => {
+        updateAIPanel(result, game.myColor, currentGameMode);
+        board.setAiHints({
+            recommend: result.bestMove,
+            threats: result.threats,
+            topThreats: result.topThreats || null
+        });
+    };
+
+    // 更新测试暴露
+    window.__gomoku = { board, game, net, ai, Board, BLACK, WHITE, currentGameMode };
+}
+
 // ===== 创建房间 =====
 async function createRoom() {
     const code = generateRoomCode();
-    currentRoomCode = code + '*'; // 带 * 表示有辅助权限
+    currentRoomCode = code + '*';
     isHost = true;
 
+    // 重建游戏对象
+    rebuildGameObjects();
+
     document.getElementById('room-code').textContent = code;
+    document.getElementById('waiting-mode-badge').textContent = currentGameMode === 'go' ? '围棋' : '五子棋';
     showPage('page-waiting');
 
     try {
-        await net.createRoom(code);
+        await net.createRoom(code, currentGameMode);
     } catch (err) {
         showPage('page-home');
         alert('创建房间失败：' + err.message);
@@ -156,7 +217,6 @@ async function copyRoomCode() {
         btn.textContent = '已复制 ✓';
         setTimeout(() => { btn.textContent = '一键复制'; }, 2000);
     } catch {
-        // fallback
         const input = document.createElement('input');
         input.value = code;
         document.body.appendChild(input);
@@ -186,19 +246,31 @@ async function joinRoom() {
 
     isHost = false;
 
+    // 加入房间时，先尝试围棋前缀，失败再试五子棋
+    // 简化处理：让用户在首页选好模式再加入
+    rebuildGameObjects();
+
     try {
-        await net.joinRoom(code);
-        // 加入成功，开始游戏
+        await net.joinRoom(code, currentGameMode);
         startGame(code);
     } catch (err) {
-        alert('加入房间失败：房间不存在或已关闭');
+        // 如果当前模式连接失败，尝试另一种模式
+        const altMode = currentGameMode === 'go' ? 'gomoku' : 'go';
+        try {
+            currentGameMode = altMode;
+            rebuildGameObjects();
+            await net.joinRoom(code, currentGameMode);
+            startGame(code);
+        } catch (err2) {
+            alert('加入房间失败：房间不存在或已关闭');
+        }
     }
 }
 
 // ===== 开始游戏 =====
 function startGame(roomCode) {
     const myColor = isHost ? BLACK : WHITE;
-    const assistant = true; // 所有玩家都有 AI 辅助
+    const assistant = true;
 
     game.start(myColor, assistant);
     ai.enable(assistant);
@@ -206,12 +278,17 @@ function startGame(roomCode) {
     // 显示/隐藏 AI 面板
     document.getElementById('ai-panel').hidden = !assistant;
 
+    // 围棋模式 UI 调整
+    const isGo = currentGameMode === 'go';
+    document.getElementById('btn-pass').hidden = !isGo;
+    document.getElementById('btn-draw').hidden = isGo; // 围棋无和棋
+    document.getElementById('go-captures-section').hidden = !isGo;
+
     // 更新房间名
     document.getElementById('game-room-name').textContent = '房间 ' + stripAssistant(roomCode);
 
     showPage('page-game');
 
-    // 如果是房主且轮到自己，触发 AI
     if (game.isMyTurn()) {
         triggerAI();
     }
@@ -222,6 +299,13 @@ function handleNetMessage(data) {
     switch (data.type) {
         case 'MOVE':
             game.receiveMove(data.x, data.y, data.color);
+            updateMoveHistory();
+            updateGoCaptures();
+            triggerAI();
+            break;
+
+        case 'PASS':
+            game.receivePass(data.color);
             updateMoveHistory();
             triggerAI();
             break;
@@ -234,6 +318,7 @@ function handleNetMessage(data) {
             if (data.accept) {
                 game.handleUndoRequest();
                 updateMoveHistory();
+                updateGoCaptures();
             } else {
                 alert('对手拒绝了你的悔棋申请');
             }
@@ -273,13 +358,13 @@ function hideDialog(overlayId) {
 
 function handleDialogResponse(accept) {
     if (dialogType === 'dialog-overlay') {
-        // 判断是悔棋还是和棋
         const msg = document.getElementById('dialog-message').textContent;
         if (msg.includes('悔棋')) {
             net.send({ type: 'UNDO_RESPONSE', accept });
             if (accept) {
                 game.handleUndoRequest();
                 updateMoveHistory();
+                updateGoCaptures();
             }
         } else if (msg.includes('和棋')) {
             net.send({ type: 'DRAW_RESPONSE', accept });
@@ -297,11 +382,35 @@ function handleWin(color) {
     const isMe = color === game.myColor;
     const msg = isMe ? '你赢了！' : '你输了...';
     document.getElementById('result-message').textContent = msg;
+    document.getElementById('score-detail').hidden = true;
     document.getElementById('result-overlay').hidden = false;
 }
 
 function handleDraw() {
     document.getElementById('result-message').textContent = '和棋！';
+    document.getElementById('score-detail').hidden = true;
+    document.getElementById('result-overlay').hidden = false;
+}
+
+// ===== 围棋终局计分 =====
+function handleGameEnd(score) {
+    const winnerText = score.winner === BLACK ? '黑方胜' : '白方胜';
+    document.getElementById('result-message').textContent = winnerText;
+
+    // 显示计分详情
+    const scoreDetail = document.getElementById('score-detail');
+    scoreDetail.innerHTML = `
+        <div class="score-row"><span>黑方棋子</span><span>${score.blackStones}</span></div>
+        <div class="score-row"><span>黑方领地</span><span>${score.blackTerritory}</span></div>
+        <div class="score-row"><span>黑方总分</span><span>${score.blackScore}</span></div>
+        <div class="score-row"><span>白方棋子</span><span>${score.whiteStones}</span></div>
+        <div class="score-row"><span>白方领地</span><span>${score.whiteTerritory}</span></div>
+        <div class="score-row"><span>白方贴目</span><span>7.5</span></div>
+        <div class="score-row"><span>白方总分</span><span>${score.whiteScore}</span></div>
+        <div class="score-winner">${winnerText}（差 ${Math.abs(score.blackScore - score.whiteScore).toFixed(1)} 目）</div>
+    `;
+    scoreDetail.hidden = false;
+
     document.getElementById('result-overlay').hidden = false;
 }
 
@@ -320,20 +429,27 @@ function updateMoveHistory() {
     document.getElementById('move-history').textContent = game.getMoveHistoryText();
 }
 
+// ===== 更新围棋提子数 =====
+function updateGoCaptures() {
+    if (currentGameMode !== 'go') return;
+    const capturesEl = document.getElementById('go-captures');
+    if (capturesEl) {
+        capturesEl.textContent = `黑 ${game.captures[BLACK]} / 白 ${game.captures[WHITE]}`;
+    }
+}
+
 // ===== 触发 AI 分析 =====
 function triggerAI() {
     if (ai.enabled && game.isMyTurn()) {
-        ai.analyze(board.cells, game.myColor, game.moveHistory.length);
+        ai.analyze(board.cells, game.myColor, game.moveHistory.length, game.captures);
     }
 }
 
 // ===== 作弊码处理 =====
 function handleCheatCode(e) {
     const key = e.key.toLowerCase();
-    
-    // 重置索引如果匹配失败
+
     if (key !== cheatSequence[currentCheatIndex].toLowerCase()) {
-        // 检查是否第一个字符匹配，允许重新开始
         if (key === cheatSequence[0].toLowerCase()) {
             currentCheatIndex = 1;
         } else {
@@ -341,11 +457,10 @@ function handleCheatCode(e) {
         }
         return;
     }
-    
+
     currentCheatIndex++;
-    
+
     if (currentCheatIndex === cheatSequence.length) {
-        // 作弊码成功激活
         activateCheatMode();
         currentCheatIndex = 0;
     }
@@ -354,8 +469,7 @@ function handleCheatCode(e) {
 function activateCheatMode() {
     cheatModeEnabled = true;
     ai.setCheatMode(true);
-    console.log('🎯 作弊模式已激活！');
-    
+
     // 微妙提示：闪烁AI面板标题
     const aiTitle = document.querySelector('#ai-panel .sidebar-title');
     if (aiTitle) {
@@ -370,8 +484,7 @@ function activateCheatMode() {
             }
         }, 200);
     }
-    
-    // 重新触发AI分析
+
     if (ai.enabled && game.isMyTurn()) {
         triggerAI();
     }
