@@ -1,8 +1,13 @@
 // scripts/smoke-e2e.mjs - 通过 Chrome DevTools Protocol 做真实浏览器冒烟测试
 // 前置：本地开发服务器与带 --remote-debugging-port 的无头 Chromium 已启动。
 // 用法：node scripts/smoke-e2e.mjs
+// 可选：SMOKE_SHOT_DIR=docs/assets，会在首页与对局两个状态各保存一张截图
+import fs from 'node:fs/promises';
+import path from 'node:path';
+
 const CDP_PORT = Number(process.env.CDP_PORT || 9223);
 const APP_URL = process.env.APP_URL || 'http://127.0.0.1:5173/';
+const SHOT_DIR = process.env.SMOKE_SHOT_DIR || '';
 
 const problems = [];
 const passes = [];
@@ -102,9 +107,25 @@ async function main() {
         return false;
     }
 
+    async function screenshot(name) {
+        if (!SHOT_DIR) return;
+        const { data } = await send('Page.captureScreenshot', { format: 'webp', quality: 90 });
+        await fs.mkdir(SHOT_DIR, { recursive: true });
+        const file = path.join(SHOT_DIR, `${name}.webp`);
+        await fs.writeFile(file, Buffer.from(data, 'base64'));
+        pass(`截图已保存：${file}`);
+    }
+
     await send('Runtime.enable');
     await send('Log.enable');
     await send('Page.enable');
+    // 固定视口，保证冒烟与截图在不同机器上一致
+    await send('Emulation.setDeviceMetricsOverride', {
+        width: 1280,
+        height: 900,
+        deviceScaleFactor: 1,
+        mobile: false
+    });
 
     // ===== 首页 =====
     await send('Page.navigate', { url: APP_URL });
@@ -114,6 +135,7 @@ async function main() {
     assert(await evaluate('document.querySelectorAll(".page.active").length === 1'), '同一时间只有一个页面处于激活状态');
     assert(await evaluate('document.getElementById("stats-text").textContent.length > 0'), '战绩文案已初始化');
     assert(await evaluate('getComputedStyle(document.getElementById("page-home")).display !== "none"'), '首页可见');
+    await screenshot('home');
 
     // 模式切换
     await evaluate('document.getElementById("btn-mode-go").click()');
@@ -168,6 +190,7 @@ async function main() {
 
     await poll('document.getElementById("ai-recommend").textContent !== "--"', 8000, 'AI 辅助推荐');
     assert(await evaluate('document.getElementById("ai-recommend").textContent !== "--"'), 'AI 辅助面板给出推荐点');
+    await screenshot('game');
 
     // ===== 人机（五子棋） =====
     await evaluate('document.getElementById("btn-back-home").click()');

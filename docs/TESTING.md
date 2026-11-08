@@ -5,8 +5,9 @@
 ```bash
 npm test        # Node 内置测试运行器（node:test）
 npm run lint    # ESLint 9 flat config
-npm run ci      # lint + test
 npm run check:ids   # 页面 id 与脚本引用一致性
+npm run check:docs  # 文档相对链接与图片存在性
+npm run ci      # 以上全部检查加测试（与 CI 一致）
 ```
 
 测试文件：
@@ -36,7 +37,15 @@ npm run dev                                   # 终端 1
 node scripts/smoke-e2e.mjs
 ```
 
-脚本会检查：页面状态、围棋设置显隐、Canvas 后备缓冲与 DPR、围棋/五子棋 AI 出招、AI 辅助推荐、深链、未捕获异常与控制台错误。
+脚本会检查：页面状态、围棋设置显隐、Canvas 后备缓冲与 DPR、围棋/五子棋 AI 出招、AI 辅助推荐、深链、未捕获异常与控制台错误。脚本固定 1280×900 视口，结果不随窗口大小变化。
+
+需要更新 README 截图时，用同一脚本输出 WebP：
+
+```bash
+SMOKE_SHOT_DIR=docs/assets node scripts/smoke-e2e.mjs
+```
+
+会生成 `docs/assets/home.webp`（首页）与 `docs/assets/game.webp`（围棋人机对局）。截图只包含页面本身，不含房间号、账号或本地数据。
 
 另有真实 PeerJS 联机冒烟（两个页面，需要外网访问 PeerJS 公共信令）：
 
