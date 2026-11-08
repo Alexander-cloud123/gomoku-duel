@@ -1,0 +1,22 @@
+{
+  "name": "gomoku-duel",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "浏览器五子棋 / 围棋，WebRTC 点对点联机 + 本地 AI 辅助与对战",
+  "scripts": {
+    "dev": "node scripts/serve.mjs",
+    "test": "node --test",
+    "lint": "eslint js scripts tests",
+    "check:ids": "node scripts/check-ids.mjs",
+    "ci": "npm run lint && npm run check:ids && npm test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.20.0",
+    "eslint": "^9.20.0",
+    "globals": "^15.14.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
