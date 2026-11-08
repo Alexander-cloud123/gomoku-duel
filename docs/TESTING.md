@@ -45,6 +45,12 @@ node scripts/smoke-e2e.mjs
 SMOKE_SHOT_DIR=docs/assets node scripts/smoke-e2e.mjs
 ```
 
+Windows PowerShell：
+
+```powershell
+$env:SMOKE_SHOT_DIR='docs/assets'; node scripts/smoke-e2e.mjs
+```
+
 会生成 `docs/assets/home.webp`（首页）与 `docs/assets/game.webp`（围棋人机对局）。截图只包含页面本身，不含房间号、账号或本地数据。
 
 另有真实 PeerJS 联机冒烟（两个页面，需要外网访问 PeerJS 公共信令）：
