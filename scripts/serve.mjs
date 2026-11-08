@@ -37,7 +37,8 @@ function isInsideRoot(filePath) {
 
 const server = createServer(async (req, res) => {
     const startedAt = Date.now();
-    let urlPath = '/';
+    // urlPath 只在 try 内赋值；失败时直接返回，因此不设初值
+    let urlPath;
     try {
         urlPath = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
     } catch {
