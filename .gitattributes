@@ -2,5 +2,14 @@
 
 *.png binary
 *.jpg binary
+*.jpeg binary
 *.webp binary
+*.gif binary
 *.ico binary
+
+*.md text eol=lf
+
+# 第三方压缩库不计入语言统计
+lib/*.js linguist-vendored
+# 历史文档不计入代码统计
+docs/archive/** linguist-documentation

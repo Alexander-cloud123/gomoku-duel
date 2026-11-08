@@ -1,9 +1,30 @@
+# 依赖与产物
 node_modules/
-.DS_Store
-Thumbs.db
-*.log
+dist/
+build/
+.cache/
+coverage/
+test-results/
+playwright-report/
+
+# 密钥与本地配置
 .env
+.env.*
+!.env.example
+.npmrc
+*.local
+
+# 编辑器与操作系统
 .vscode/
 .idea/
-coverage/
+.cursor/
+.claude/
+.superpowers/
+.DS_Store
+Thumbs.db
+
+# 临时文件
+tmp/
 *.tmp
+*.bak
+*.log
