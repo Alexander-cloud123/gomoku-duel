@@ -10,9 +10,13 @@ updates:
     commit-message:
       prefix: "chore(deps)"
     groups:
-      dev-dependencies:
+      # 次要版本与补丁合并为一个 PR；主版本单独开 PR，避免一次升级捆绑多个 breaking change
+      dev-dependencies-minor-patch:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: github-actions
     directory: /
