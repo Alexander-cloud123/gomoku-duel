@@ -38,6 +38,14 @@ node scripts/smoke-e2e.mjs
 
 脚本会检查：页面状态、围棋设置显隐、Canvas 后备缓冲与 DPR、围棋/五子棋 AI 出招、AI 辅助推荐、深链、未捕获异常与控制台错误。
 
+另有真实 PeerJS 联机冒烟（两个页面，需要外网访问 PeerJS 公共信令）：
+
+```bash
+node scripts/smoke-online.mjs
+```
+
+覆盖：建房、加入、颜色分配、双向落子、悔棋请求/同意、认输结算。
+
 ## 手工验收矩阵（两个浏览器窗口）
 
 启动 `npm run dev`，打开两个标签页（或一普通一隐身）以确保独立 Peer。

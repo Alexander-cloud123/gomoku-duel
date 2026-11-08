@@ -13,7 +13,7 @@ import {
     colorName
 } from './rules/constants.js';
 import { generateRoomCode, stripAssistant } from './room.js';
-import { showPage, PAGES, getCurrentPage } from './ui/pages.js';
+import { showPage, PAGES } from './ui/pages.js';
 import { showToast } from './ui/toast.js';
 import { Dialog } from './ui/dialog.js';
 import { loadProfile, saveProfile, recordResult, formatStats } from './ui/stats.js';
@@ -342,9 +342,7 @@ function sessionCallbacks() {
     return {
         onStatus: (status) => updateConnectionUI(status),
         onReady: ({ reconnecting }) => {
-            if (getCurrentPage() === PAGES.WAITING || getCurrentPage() === PAGES.JOIN) {
-                showPage(PAGES.GAME);
-            }
+            showPage(PAGES.GAME);
             updateGameChrome();
             if (reconnecting) {
                 showToast('已重新连接对手', 'success');
