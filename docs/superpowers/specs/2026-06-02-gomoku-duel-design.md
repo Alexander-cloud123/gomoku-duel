@@ -1,5 +1,7 @@
 # Gomoku Duel - 五子棋双端联机游戏设计文档
 
+> 注：v2 重构已于 2026-11 完成，本文档保留为历史设计稿。当前架构见 `docs/ARCHITECTURE.md`，协议见 `docs/PROTOCOL.md`，变更见 `docs/CHANGELOG.md`。
+
 > 日期：2026-06-02
 > 仓库：https://github.com/Alexander-cloud123/gomoku-duel
 > 状态：已审核通过
