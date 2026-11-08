@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 使用、测试与已知限制
+    url: https://github.com/Alexander-cloud123/gomoku-duel/blob/main/docs/TESTING.md
+    about: 冒烟脚本、手工验收矩阵与已知限制
+  - name: 安全问题
+    url: https://github.com/Alexander-cloud123/gomoku-duel/security/advisories/new
+    about: 请勿通过公开 Issue 报告漏洞

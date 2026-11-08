@@ -1,0 +1,71 @@
+name: Bug 报告
+description: 报告可复现的缺陷
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提交前请先搜索已有 Issue。请勿在此报告安全漏洞，见 [SECURITY.md](https://github.com/Alexander-cloud123/gomoku-duel/blob/main/SECURITY.md)。
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 缺陷描述
+      description: 实际发生了什么？期望的行为是什么？
+      placeholder: 例如：围棋双虚手后，一方确认点目，另一方界面没有同步
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 打开首页，选择围棋 9 路
+        2. 创建房间，另一窗口加入
+        3. 双方连续虚手
+        4. 房主点击确认
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: 对局模式
+      options:
+        - 联机对战 · 房主
+        - 联机对战 · 访客
+        - 人机对战
+        - 围棋点目 / 终局
+        - 仅页面或界面问题
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: 浏览器与设备
+      description: 浏览器版本、操作系统、是否移动端
+      placeholder: Chrome 130 / Windows 11 / 桌面 1280×900
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 控制台错误或截图
+      description: 打开开发者工具复制报错信息；截图可直接拖入此区域
+      render: shell
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 确认
+      options:
+        - label: 我已搜索过现有 Issue，未发现重复
+          required: true
+        - label: 我是通过 `npm run dev` 或线上站点访问的，而不是直接双击 `index.html`
+          required: true

@@ -1,0 +1,5 @@
+#!/bin/sh
+# 推送前运行本地校验（可选）。
+# 启用方式：git config core.hooksPath .githooks
+# 跳过方式：git push --no-verify
+npm run ci
