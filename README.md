@@ -86,7 +86,7 @@
 
 ## 快速开始
 
-要求 Node.js 20 及以上（仅用于开发服务器与测试；**运行游戏本身不需要 Node**）。
+要求 Node.js 22.13 及以上（仅用于开发服务器与测试；**运行游戏本身不需要 Node**）。
 
 ```bash
 git clone https://github.com/Alexander-cloud123/gomoku-duel.git
@@ -180,7 +180,7 @@ docs/
 - WebRTC（PeerJS 1.5.4，vendored 至 `lib/`）
 - Web Worker + 迭代加深 Alpha-Beta + 置换表（五子棋）；一手启发式（围棋）
 - Node 内置测试运行器 + ESLint（开发期）
-- GitHub Actions（Node 20 / 22）与 Cloudflare Pages（自动部署）
+- GitHub Actions（Node 22 / 24）与 Cloudflare Pages（自动部署）
 
 ## 开发与测试
 
@@ -200,7 +200,7 @@ npm run ci
 | `tests/session.test.mjs` | 握手、落子、去重、伪造消息、悔棋、认输、和棋、重开、点目、重连 |
 | `tests/ai.test.mjs` | 棋型识别、威胁、选点、堵四、时间预算、围棋合法性 |
 
-联机会话测试使用内存传输，不依赖浏览器或 PeerJS；浏览器冒烟脚本见 [docs/TESTING.md](docs/TESTING.md)（14 项 UI 检查，真实 PeerJS 联机 10 项）。CI 在 Node 20 / 22 上执行 lint、页面 id 检查、文档链接检查与全部测试。
+联机会话测试使用内存传输，不依赖浏览器或 PeerJS；浏览器冒烟脚本见 [docs/TESTING.md](docs/TESTING.md)（14 项 UI 检查，真实 PeerJS 联机 10 项）。CI 在 Node 22 / 24 上执行 lint、页面 id 检查、文档链接检查与全部测试。
 
 ## 部署
 
