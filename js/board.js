@@ -1,563 +1,531 @@
-// board.js - 棋盘渲染、落子、胜负判定（支持五子棋和围棋）
+// js/board.js - 棋盘视图（Canvas 渲染 + 指针/键盘输入，不含规则）
+import { EMPTY, BLACK, WHITE, inBounds, columnLabel, rowLabel } from './rules/constants.js';
 
-const EMPTY = 0, BLACK = 1, WHITE = 2;
+const STAR_POINTS = {
+    9: [2, 4, 6],
+    13: [3, 6, 9],
+    15: [3, 7, 11],
+    19: [3, 9, 15]
+};
 
-export class Board {
-    constructor(canvas, size = 15, gameMode = 'gomoku') {
+const COLORS = {
+    wood: '#F4ECD8',
+    woodEdge: '#E8DCC0',
+    line: '#3D3D3D',
+    label: '#7F8C8D',
+    black: '#1A1A1A',
+    white: '#FFFFFF',
+    accent: '#4A90E2',
+    gold: '#E8B33C',
+    danger: '#E74C3C',
+    win: '#FF4444'
+};
+
+function easeOutCubic(t) {
+    return 1 - Math.pow(1 - t, 3);
+}
+
+function clamp01(v) {
+    return Math.max(0, Math.min(1, v));
+}
+
+export class BoardView {
+    constructor(canvas, options = {}) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
-        this.size = size;
-        this.gameMode = gameMode;
-        this.cells = Array.from({ length: size }, () => new Array(size).fill(EMPTY));
-        this.onCellClick = null;
+        this.size = options.size || 15;
+        this.mode = options.mode || 'gomoku';
+        this.interactive = options.interactive !== false;
+
+        this.onMove = null;
+        this.onDeadClick = null;
+
+        this.cells = [];
+        for (let y = 0; y < this.size; y++) this.cells.push(new Array(this.size).fill(EMPTY));
+
         this.lastMove = null;
-        this.aiHints = null; // { recommend: {x,y}, threats: [{x,y}], topThreats: [{x,y}] }
+        this.winLine = null;
+        this.koPoint = null;
+        this.deadStones = new Set();
+        this.hints = null;
+        this.deadMarking = false;
 
-        this._padding = 30;
-        this._cellSize = (canvas.width - this._padding * 2) / (size - 1);
-
-        // 围棋特有状态
-        this.koPoint = null; // 打劫禁着点 {x, y}
-        this.prevStateHash = null; // 上一步棋盘状态哈希
+        this._hover = null;
+        this._cursor = null;
+        this._animations = new Map();
+        this._raf = 0;
+        this._layout = { side: 0, padding: 0, cell: 0 };
+        this._static = null;
+        this._dpr = 1;
 
         this._bindEvents();
-        this.render();
+        this._observeResize();
+        this._resize();
     }
 
-    _bindEvents() {
-        // 保存监听器引用，以便后续销毁
-        this._clickHandler = (e) => {
-            const { col, row, nearEnough } = this._eventToGrid(e);
-            if (nearEnough && col >= 0 && col < this.size && row >= 0 && row < this.size) {
-                if (this.onCellClick) this.onCellClick(col, row);
-            }
-        };
-
-        this._moveHandler = (e) => {
-            const { col, row, nearEnough } = this._eventToGrid(e);
-
-            if (nearEnough && col >= 0 && col < this.size && row >= 0 && row < this.size && this.cells[row][col] === EMPTY) {
-                this._hoverPos = { x: col, y: row };
-            } else {
-                this._hoverPos = null;
-            }
-            this.render();
-        };
-
-        this._leaveHandler = () => {
-            this._hoverPos = null;
-            this.render();
-        };
-
-        this.canvas.addEventListener('click', this._clickHandler);
-        this.canvas.addEventListener('mousemove', this._moveHandler);
-        this.canvas.addEventListener('mouseleave', this._leaveHandler);
-    }
-
-    destroy() {
-        if (this._clickHandler) this.canvas.removeEventListener('click', this._clickHandler);
-        if (this._moveHandler) this.canvas.removeEventListener('mousemove', this._moveHandler);
-        if (this._leaveHandler) this.canvas.removeEventListener('mouseleave', this._leaveHandler);
-    }
-
-    // 将鼠标事件转换为棋盘坐标，并判断是否足够靠近交叉点
-    _eventToGrid(e) {
-        const rect = this.canvas.getBoundingClientRect();
-        const scaleX = this.canvas.width / rect.width;
-        const scaleY = this.canvas.height / rect.height;
-        const px = (e.clientX - rect.left) * scaleX;
-        const py = (e.clientY - rect.top) * scaleY;
-
-        const col = Math.round((px - this._padding) / this._cellSize);
-        const row = Math.round((py - this._padding) / this._cellSize);
-
-        // 计算点击位置到最近交叉点的像素距离
-        const snapX = this._padding + col * this._cellSize;
-        const snapY = this._padding + row * this._cellSize;
-        const dist = Math.sqrt((px - snapX) ** 2 + (py - snapY) ** 2);
-
-        // 只有距离在半个格子半径内才算有效点击
-        const threshold = this._cellSize * 0.45;
-        const nearEnough = dist <= threshold;
-
-        return { col, row, nearEnough };
-    }
-
-    place(x, y, color) {
-        if (x < 0 || x >= this.size || y < 0 || y >= this.size) return false;
-        if (this.cells[y][x] !== EMPTY) return false;
-
-        if (this.gameMode === 'go') {
-            return this._placeGo(x, y, color);
-        }
-
-        // 五子棋模式
-        this.cells[y][x] = color;
-        this.lastMove = { x, y };
-        this.render();
-        return true;
-    }
-
-    // ===== 围棋落子逻辑 =====
-    _placeGo(x, y, color) {
-        const opp = color === BLACK ? WHITE : BLACK;
-
-        // 1. 检查打劫禁着点
-        if (this.koPoint && this.koPoint.x === x && this.koPoint.y === y) {
-            return false;
-        }
-
-        // 2. 临时落子
-        this.cells[y][x] = color;
-
-        // 3. 检查并提走对方无气的棋组
-        const captured = [];
-        const neighbors = this._getNeighbors(x, y);
-        for (const [nx, ny] of neighbors) {
-            if (this.cells[ny][nx] === opp) {
-                const group = this._getGroup(nx, ny);
-                const liberties = this._getLiberties(group);
-                if (liberties === 0) {
-                    for (const stone of group) {
-                        this.cells[stone.y][stone.x] = EMPTY;
-                        captured.push(stone);
-                    }
-                }
-            }
-        }
-
-        // 4. 检查自杀（落子后己方棋组无气且未提子）
-        if (captured.length === 0) {
-            const myGroup = this._getGroup(x, y);
-            const myLiberties = this._getLiberties(myGroup);
-            if (myLiberties === 0) {
-                // 自杀着，撤回
-                this.cells[y][x] = EMPTY;
-                return false;
-            }
-        }
-
-        // 5. 更新打劫禁着点（只提一子且己方也只一子时设置 Ko）
-        this.koPoint = null;
-        if (captured.length === 1) {
-            const myGroup = this._getGroup(x, y);
-            if (myGroup.length === 1) {
-                this.koPoint = { x: captured[0].x, y: captured[0].y };
-            }
-        }
-
-        this.lastMove = { x, y };
-        this.render();
-        return { captured };
-    }
-
-    // 获取相邻位置
-    _getNeighbors(x, y) {
-        const neighbors = [];
-        if (x > 0) neighbors.push([x - 1, y]);
-        if (x < this.size - 1) neighbors.push([x + 1, y]);
-        if (y > 0) neighbors.push([x, y - 1]);
-        if (y < this.size - 1) neighbors.push([x, y + 1]);
-        return neighbors;
-    }
-
-    // BFS 获取连通同色棋子组
-    _getGroup(x, y) {
-        const color = this.cells[y][x];
-        if (color === EMPTY) return [];
-
-        const visited = new Set();
-        const group = [];
-        const queue = [{ x, y }];
-        visited.add(y * this.size + x);
-
-        while (queue.length > 0) {
-            const curr = queue.shift();
-            group.push(curr);
-
-            for (const [nx, ny] of this._getNeighbors(curr.x, curr.y)) {
-                const key = ny * this.size + nx;
-                if (!visited.has(key) && this.cells[ny][nx] === color) {
-                    visited.add(key);
-                    queue.push({ x: nx, y: ny });
-                }
-            }
-        }
-
-        return group;
-    }
-
-    // 计算一个棋组的气数
-    _getLiberties(group) {
-        const libertySet = new Set();
-        for (const stone of group) {
-            for (const [nx, ny] of this._getNeighbors(stone.x, stone.y)) {
-                if (this.cells[ny][nx] === EMPTY) {
-                    libertySet.add(ny * this.size + nx);
-                }
-            }
-        }
-        return libertySet.size;
-    }
-
-    // 获取棋盘状态哈希（用于 Ko 判定）
-    getStateHash() {
-        let hash = '';
-        for (let r = 0; r < this.size; r++) {
-            for (let c = 0; c < this.size; c++) {
-                hash += this.cells[r][c];
-            }
-        }
-        return hash;
-    }
-
-    // 围棋计分：中国规则数子法
-    calculateScore(captures) {
-        const visited = Array.from({ length: this.size }, () => new Array(this.size).fill(false));
-        let blackTerritory = 0;
-        let whiteTerritory = 0;
-        let blackStones = 0;
-        let whiteStones = 0;
-
-        // 统计棋子数
-        for (let r = 0; r < this.size; r++) {
-            for (let c = 0; c < this.size; c++) {
-                if (this.cells[r][c] === BLACK) blackStones++;
-                else if (this.cells[r][c] === WHITE) whiteStones++;
-            }
-        }
-
-        // BFS 找空点区域，判断归属
-        for (let r = 0; r < this.size; r++) {
-            for (let c = 0; c < this.size; c++) {
-                if (this.cells[r][c] !== EMPTY || visited[r][c]) continue;
-
-                const region = [];
-                const queue = [{ x: c, y: r }];
-                visited[r][c] = true;
-                let touchesBlack = false;
-                let touchesWhite = false;
-
-                while (queue.length > 0) {
-                    const curr = queue.shift();
-                    region.push(curr);
-
-                    for (const [nx, ny] of this._getNeighbors(curr.x, curr.y)) {
-                        if (this.cells[ny][nx] === BLACK) touchesBlack = true;
-                        else if (this.cells[ny][nx] === WHITE) touchesWhite = true;
-                        else if (!visited[ny][nx]) {
-                            visited[ny][nx] = true;
-                            queue.push({ x: nx, y: ny });
-                        }
-                    }
-                }
-
-                // 只被一方包围的空点算该方领地
-                if (touchesBlack && !touchesWhite) blackTerritory += region.length;
-                else if (touchesWhite && !touchesBlack) whiteTerritory += region.length;
-                // 双方都接触的空点为中立，不计分
-            }
-        }
-
-        // 中国规则：子数 + 目数，白方贴 7.5 目
-        const blackScore = blackStones + blackTerritory;
-        const whiteScore = whiteStones + whiteTerritory + 7.5;
-        const winner = blackScore > whiteScore ? BLACK : WHITE;
-
-        return {
-            blackScore,
-            whiteScore,
-            blackStones,
-            whiteStones,
-            blackTerritory,
-            whiteTerritory,
-            winner
-        };
-    }
-
-    // ===== 通用方法 =====
-
-    undo(x, y, restoreStones = null) {
-        if (x >= 0 && x < this.size && y >= 0 && y < this.size) {
-            this.cells[y][x] = EMPTY;
-            // 围棋模式：恢复被提走的棋子
-            if (restoreStones) {
-                for (const s of restoreStones) {
-                    this.cells[s.y][s.x] = s.color;
-                }
-            }
-            this.render();
-        }
-    }
-
-    checkWin(x, y, color) {
-        if (this.gameMode === 'go') return false; // 围棋无即时胜负
-
-        // 五子棋：五连判定
-        const directions = [[1, 0], [0, 1], [1, 1], [1, -1]];
-        for (const [dx, dy] of directions) {
-            let count = 1;
-            for (let i = 1; i < 5; i++) {
-                const nx = x + dx * i, ny = y + dy * i;
-                if (ny >= 0 && ny < this.size && nx >= 0 && nx < this.size && this.cells[ny][nx] === color) count++;
-                else break;
-            }
-            for (let i = 1; i < 5; i++) {
-                const nx = x - dx * i, ny = y - dy * i;
-                if (ny >= 0 && ny < this.size && nx >= 0 && nx < this.size && this.cells[ny][nx] === color) count++;
-                else break;
-            }
-            if (count >= 5) return true;
-        }
-        return false;
-    }
-
-    isFull() {
-        for (let r = 0; r < this.size; r++)
-            for (let c = 0; c < this.size; c++)
-                if (this.cells[r][c] === EMPTY) return false;
-        return true;
-    }
-
-    setAiHints(hints) {
-        this.aiHints = hints;
-        this.render();
-    }
-
-    reset() {
-        this.cells = Array.from({ length: this.size }, () => new Array(this.size).fill(EMPTY));
+    setSize(size, mode = this.mode) {
+        this.size = size;
+        this.mode = mode;
+        this.cells = [];
+        for (let y = 0; y < size; y++) this.cells.push(new Array(size).fill(EMPTY));
         this.lastMove = null;
-        this.aiHints = null;
-        this._hoverPos = null;
+        this.winLine = null;
         this.koPoint = null;
-        this.prevStateHash = null;
+        this.deadStones = new Set();
+        this.hints = null;
+        this._hover = null;
+        this._cursor = null;
+        this._animations.clear();
+        this._resize();
+    }
+
+    /**
+     * 用对局快照更新视图。
+     */
+    setState(state) {
+        const previous = this.cells;
+        this.cells = state.cells;
+        this.lastMove = state.lastMove || null;
+        this.winLine = state.winLine || null;
+        this.koPoint = state.koPoint || null;
+        this.deadStones = new Set(state.deadStones || []);
+
+        const lm = this.lastMove;
+        if (lm && previous.length === this.size && previous[lm.y] && previous[lm.y][lm.x] === EMPTY &&
+            this.cells[lm.y][lm.x] !== EMPTY) {
+            const color = this.cells[lm.y][lm.x];
+            this._animations.set(`${lm.x},${lm.y}`, {
+                x: lm.x, y: lm.y, color, start: performance.now()
+            });
+        }
+        for (const key of this._animations.keys()) {
+            const [x, y] = key.split(',').map(Number);
+            if (this.cells[y] && this.cells[y][x] === EMPTY) this._animations.delete(key);
+        }
+
+        this._startAnimationLoop();
         this.render();
     }
 
-    render() {
-        const ctx = this.ctx;
-        const p = this._padding;
-        const cs = this._cellSize;
-        const size = this.size;
+    setHints(hints) {
+        this.hints = hints || null;
+        this.render();
+    }
 
-        // 背景
-        ctx.fillStyle = '#F4ECD8';
-        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    setInteractive(interactive) {
+        this.interactive = interactive;
+        this.canvas.classList.toggle('not-interactive', !interactive);
+        this.render();
+    }
 
-        // 网格线
-        ctx.strokeStyle = '#3D3D3D';
-        ctx.lineWidth = 1;
-        for (let i = 0; i < size; i++) {
+    setDeadMarking(marking) {
+        this.deadMarking = marking;
+        this.canvas.classList.toggle('marking', marking);
+        this.render();
+    }
+
+    _observeResize() {
+        if (typeof ResizeObserver !== 'undefined') {
+            this._resizeObserver = new ResizeObserver(() => this._resize());
+            this._resizeObserver.observe(this.canvas);
+        } else {
+            this._windowResize = () => this._resize();
+            window.addEventListener('resize', this._windowResize);
+        }
+    }
+
+    _resize() {
+        const rect = this.canvas.getBoundingClientRect();
+        const cssSide = Math.max(240, Math.round(rect.width || 600));
+        const dpr = Math.min(3, window.devicePixelRatio || 1);
+        if (this._dpr !== dpr || this.canvas.width !== Math.round(cssSide * dpr)) {
+            this._dpr = dpr;
+            this.canvas.width = Math.round(cssSide * dpr);
+            this.canvas.height = Math.round(cssSide * dpr);
+            this.canvas.style.height = `${cssSide}px`;
+        }
+
+        const marginCells = 0.9;
+        const cell = cssSide / (this.size - 1 + marginCells * 2);
+        this._layout = {
+            side: cssSide,
+            cell,
+            padding: cell * marginCells
+        };
+
+        this._buildStaticLayer();
+        this.render();
+    }
+
+    _buildStaticLayer() {
+        const { side, cell, padding } = this._layout;
+        const dpr = this._dpr;
+        if (!this._static) this._static = document.createElement('canvas');
+        const layer = this._static;
+        layer.width = Math.round(side * dpr);
+        layer.height = Math.round(side * dpr);
+        const ctx = layer.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, side, side);
+
+        // 木质底色
+        const gradient = ctx.createLinearGradient(0, 0, side, side);
+        gradient.addColorStop(0, COLORS.wood);
+        gradient.addColorStop(1, COLORS.woodEdge);
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, side, side);
+
+        const gridEnd = padding + (this.size - 1) * cell;
+
+        // 网格
+        ctx.strokeStyle = COLORS.line;
+        ctx.lineWidth = Math.max(1, cell * 0.035);
+        ctx.lineCap = 'round';
+        for (let i = 0; i < this.size; i++) {
+            const pos = padding + i * cell;
             ctx.beginPath();
-            ctx.moveTo(p + i * cs, p);
-            ctx.lineTo(p + i * cs, p + (size - 1) * cs);
+            ctx.moveTo(padding, pos);
+            ctx.lineTo(gridEnd, pos);
             ctx.stroke();
-
             ctx.beginPath();
-            ctx.moveTo(p, p + i * cs);
-            ctx.lineTo(p + (size - 1) * cs, p + i * cs);
+            ctx.moveTo(pos, padding);
+            ctx.lineTo(pos, gridEnd);
             ctx.stroke();
         }
 
         // 星位
-        const starPoints = this._getStarPoints();
-        ctx.fillStyle = '#3D3D3D';
-        for (const { r, c } of starPoints) {
-            ctx.beginPath();
-            ctx.arc(p + c * cs, p + r * cs, size === 19 ? 3.5 : 4, 0, Math.PI * 2);
-            ctx.fill();
+        const stars = STAR_POINTS[this.size] || [];
+        ctx.fillStyle = COLORS.line;
+        for (const r of stars) {
+            for (const c of stars) {
+                ctx.beginPath();
+                ctx.arc(padding + c * cell, padding + r * cell, Math.max(2, cell * 0.11), 0, Math.PI * 2);
+                ctx.fill();
+            }
         }
 
-        // 坐标标注
-        ctx.fillStyle = '#7F8C8D';
-        ctx.font = size === 19 ? '9px sans-serif' : '11px sans-serif';
+        // 坐标：列字母在下方，行号在左侧
+        const fontSize = Math.max(9, Math.min(15, cell * 0.38));
+        ctx.fillStyle = COLORS.label;
+        ctx.font = `${fontSize}px -apple-system, "Segoe UI", sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        for (let i = 0; i < size; i++) {
-            // 列标 A-S (19) 或 A-O (15)
-            ctx.fillText(String.fromCharCode(65 + (i >= 8 ? i + 1 : i)), p + i * cs, p - 14);
-            // 行标 1-19 或 1-15
-            ctx.fillText(String(size - i), p - 16, p + i * cs);
+        for (let i = 0; i < this.size; i++) {
+            ctx.fillText(columnLabel(i), padding + i * cell, gridEnd + cell * 0.55);
+            ctx.textAlign = 'right';
+            ctx.fillText(String(rowLabel(i, this.size)), padding - cell * 0.5, padding + i * cell);
+            ctx.textAlign = 'center';
         }
+    }
 
-        // AI 提示：作弊模式 - 显示三个威胁位置
-        if (this.aiHints && this.aiHints.topThreats) {
-            const colors = [
-                'rgba(255, 0, 0, 0.5)',      // 红色 - 最大威胁
-                'rgba(255, 165, 0, 0.4)',    // 橙色
-                'rgba(255, 255, 0, 0.35)'    // 黄色
-            ];
-            for (let i = 0; i < this.aiHints.topThreats.length; i++) {
-                const t = this.aiHints.topThreats[i];
-                ctx.fillStyle = colors[i];
-                ctx.beginPath();
-                ctx.arc(p + t.x * cs, p + t.y * cs, cs * 0.4, 0, Math.PI * 2);
-                ctx.fill();
-
-                // 标注数字
-                ctx.fillStyle = '#FFF';
-                ctx.font = size === 19 ? 'bold 11px sans-serif' : 'bold 14px sans-serif';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText((i + 1).toString(), p + t.x * cs, p + t.y * cs);
+    _startAnimationLoop() {
+        if (this._raf || this._animations.size === 0) return;
+        const tick = () => {
+            this._raf = 0;
+            this.render();
+            let alive = false;
+            const now = performance.now();
+            for (const anim of this._animations.values()) {
+                if (now - anim.start < 200) alive = true;
             }
-        }
-        // AI 提示：正常模式 - 威胁位置
-        else if (this.aiHints && this.aiHints.threats) {
-            for (const t of this.aiHints.threats) {
-                ctx.fillStyle = 'rgba(255, 68, 68, 0.35)';
-                ctx.beginPath();
-                ctx.arc(p + t.x * cs, p + t.y * cs, cs * 0.4, 0, Math.PI * 2);
-                ctx.fill();
+            if (alive) this._raf = requestAnimationFrame(tick);
+            else this._animations.clear();
+        };
+        this._raf = requestAnimationFrame(tick);
+    }
+
+    _stoneGeometry(x, y) {
+        const { padding, cell } = this._layout;
+        return {
+            cx: padding + x * cell,
+            cy: padding + y * cell,
+            radius: cell * 0.42
+        };
+    }
+
+    _eventToCell(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const px = e.clientX - rect.left;
+        const py = e.clientY - rect.top;
+        const { padding, cell, side } = this._layout;
+        const col = Math.round((px - padding) / cell);
+        const row = Math.round((py - padding) / cell);
+        if (!inBounds(this.size, col, row)) return null;
+        const cx = padding + col * cell;
+        const cy = padding + row * cell;
+        const dist = Math.hypot(px - cx, py - cy);
+        if (dist > cell * 0.52) return null;
+        if (px < 0 || py < 0 || px > side || py > side) return null;
+        return { x: col, y: row };
+    }
+
+    _bindEvents() {
+        this._onPointerDown = (e) => {
+            if (!this.interactive) return;
+            const cellPos = this._eventToCell(e);
+            if (!cellPos) return;
+            e.preventDefault();
+            if (this.deadMarking) {
+                if (this.onDeadClick) this.onDeadClick(cellPos.x, cellPos.y);
+                return;
             }
-        }
+            if (this.onMove) this.onMove(cellPos.x, cellPos.y);
+        };
 
-        // AI 提示：推荐位置
-        if (this.aiHints && this.aiHints.recommend) {
-            const r = this.aiHints.recommend;
-            ctx.strokeStyle = '#FFD700';
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.arc(p + r.x * cs, p + r.y * cs, cs * 0.42, 0, Math.PI * 2);
-            ctx.stroke();
+        this._onPointerMove = (e) => {
+            if (!this.interactive) return;
+            const next = this._eventToCell(e);
+            const changed = (!this._hover && next) ||
+                (this._hover && !next) ||
+                (this._hover && next && (this._hover.x !== next.x || this._hover.y !== next.y));
+            this._hover = next;
+            if (changed) this.render();
+        };
 
-            ctx.fillStyle = 'rgba(255, 215, 0, 0.2)';
+        this._onPointerLeave = () => {
+            if (this._hover) {
+                this._hover = null;
+                this.render();
+            }
+        };
+
+        this._onKeyDown = (e) => {
+            if (!this.interactive) return;
+            const cursor = this._cursor || { x: Math.floor(this.size / 2), y: Math.floor(this.size / 2) };
+            let next = null;
+            const deltas = {
+                ArrowLeft: [-1, 0],
+                ArrowRight: [1, 0],
+                ArrowUp: [0, -1],
+                ArrowDown: [0, 1]
+            };
+            if (deltas[e.key]) {
+                next = { x: cursor.x + deltas[e.key][0], y: cursor.y + deltas[e.key][1] };
+                e.preventDefault();
+            }
+            if (next) {
+                this._cursor = {
+                    x: Math.max(0, Math.min(this.size - 1, next.x)),
+                    y: Math.max(0, Math.min(this.size - 1, next.y))
+                };
+                this.render();
+                return;
+            }
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                const pos = this._cursor || { x: Math.floor(this.size / 2), y: Math.floor(this.size / 2) };
+                if (this.deadMarking) {
+                    if (this.onDeadClick) this.onDeadClick(pos.x, pos.y);
+                } else if (this.onMove) {
+                    this.onMove(pos.x, pos.y);
+                }
+            }
+        };
+
+        this.canvas.addEventListener('pointerdown', this._onPointerDown);
+        this.canvas.addEventListener('pointermove', this._onPointerMove);
+        this.canvas.addEventListener('pointerleave', this._onPointerLeave);
+        this.canvas.addEventListener('keydown', this._onKeyDown);
+    }
+
+    render() {
+        if (!this.ctx) return;
+        const { side } = this._layout;
+        const dpr = this._dpr;
+        this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        this.ctx.clearRect(0, 0, side, side);
+
+        if (this._static) this.ctx.drawImage(this._static, 0, 0, side, side);
+
+        this._renderHints();
+        this._renderStones();
+        this._renderMarks();
+        this._renderCursor();
+
+        this.canvas.setAttribute('aria-label',
+            `${this.mode === 'go' ? '围棋' : '五子棋'}棋盘，${this.size} 路，共 ${this.size * this.size} 个交叉点`);
+    }
+
+    _renderHints() {
+        if (!this.hints) return;
+        const ctx = this.ctx;
+        const { cell } = this._layout;
+
+        for (const threat of this.hints.threats || []) {
+            const p = this._stoneGeometry(threat.x, threat.y);
+            ctx.fillStyle = threat.level === 'danger' ? 'rgba(255, 68, 68, 0.42)' : 'rgba(243, 156, 18, 0.4)';
             ctx.beginPath();
-            ctx.arc(p + r.x * cs, p + r.y * cs, cs * 0.42, 0, Math.PI * 2);
+            ctx.arc(p.cx, p.cy, cell * 0.4, 0, Math.PI * 2);
             ctx.fill();
         }
 
-        // 棋子
-        for (let r = 0; r < size; r++) {
-            for (let c = 0; c < size; c++) {
-                if (this.cells[r][c] !== EMPTY) {
-                    this._drawStone(c, r, this.cells[r][c]);
+        for (const alt of this.hints.alternates || []) {
+            const p = this._stoneGeometry(alt.x, alt.y);
+            ctx.fillStyle = 'rgba(74, 144, 226, 0.55)';
+            ctx.beginPath();
+            ctx.arc(p.cx, p.cy, cell * 0.14, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        if (this.hints.recommend) {
+            const r = this.hints.recommend;
+            const p = this._stoneGeometry(r.x, r.y);
+            ctx.save();
+            ctx.strokeStyle = COLORS.gold;
+            ctx.lineWidth = Math.max(2, cell * 0.09);
+            ctx.shadowColor = 'rgba(232, 179, 60, 0.65)';
+            ctx.shadowBlur = cell * 0.4;
+            ctx.beginPath();
+            ctx.arc(p.cx, p.cy, cell * 0.44, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+
+    _renderStones() {
+        const now = performance.now();
+        const ctx = this.ctx;
+
+        for (let y = 0; y < this.size; y++) {
+            for (let x = 0; x < this.size; x++) {
+                const color = this.cells[y][x];
+                if (color === EMPTY) continue;
+                const anim = this._animations.get(`${x},${y}`);
+                let scale = 1;
+                let alpha = 1;
+                if (anim) {
+                    const progress = clamp01((now - anim.start) / 180);
+                    scale = 0.62 + 0.38 * easeOutCubic(progress);
+                    alpha = 0.6 + 0.4 * progress;
+                }
+                ctx.globalAlpha = alpha;
+                this._drawStone(x, y, color, scale);
+                ctx.globalAlpha = 1;
+
+                if (this.deadStones.has(`${x},${y}`)) {
+                    this._drawDeadMark(x, y);
                 }
             }
         }
+    }
 
-        // 最后落子标记
-        if (this.lastMove) {
-            const lm = this.lastMove;
-            if (this.gameMode === 'go') {
-                // 围棋：在棋子上画小方块
-                const markColor = this.cells[lm.y][lm.x] === BLACK ? '#FFFFFF' : '#000000';
-                ctx.fillStyle = markColor;
-                const markSize = cs * 0.12;
-                ctx.fillRect(
-                    p + lm.x * cs - markSize,
-                    p + lm.y * cs - markSize,
-                    markSize * 2,
-                    markSize * 2
-                );
-            } else {
-                // 五子棋：红色方框
-                ctx.strokeStyle = '#FF4444';
-                ctx.lineWidth = 2;
-                const markSize = 5;
-                ctx.strokeRect(
-                    p + lm.x * cs - markSize,
-                    p + lm.y * cs - markSize,
-                    markSize * 2,
-                    markSize * 2
-                );
-            }
+    _drawStone(x, y, color, scale = 1) {
+        const ctx = this.ctx;
+        const p = this._stoneGeometry(x, y);
+        const radius = p.radius * scale;
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.18)';
+        ctx.beginPath();
+        ctx.arc(p.cx + radius * 0.08, p.cy + radius * 0.12, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        const gradient = ctx.createRadialGradient(
+            p.cx - radius * 0.35, p.cy - radius * 0.35, radius * 0.2,
+            p.cx, p.cy, radius
+        );
+
+        if (color === BLACK) {
+            gradient.addColorStop(0, '#4A4A4A');
+            gradient.addColorStop(1, COLORS.black);
+        } else {
+            gradient.addColorStop(0, '#FFFFFF');
+            gradient.addColorStop(1, '#E6E6E6');
         }
 
-        // 打劫禁着点标记（围棋）
-        if (this.gameMode === 'go' && this.koPoint) {
-            const kp = this.koPoint;
-            ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
-            ctx.lineWidth = 2;
-            const s = cs * 0.2;
-            ctx.strokeRect(p + kp.x * cs - s, p + kp.y * cs - s, s * 2, s * 2);
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(p.cx, p.cy, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (color === WHITE) {
+            ctx.strokeStyle = 'rgba(26, 26, 26, 0.35)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+    }
+
+    _drawDeadMark(x, y) {
+        const ctx = this.ctx;
+        const p = this._stoneGeometry(x, y);
+        const r = p.radius * 0.45;
+        ctx.strokeStyle = 'rgba(231, 76, 60, 0.9)';
+        ctx.lineWidth = Math.max(1.5, this._layout.cell * 0.06);
+        ctx.beginPath();
+        ctx.moveTo(p.cx - r, p.cy - r);
+        ctx.lineTo(p.cx + r, p.cy + r);
+        ctx.moveTo(p.cx + r, p.cy - r);
+        ctx.lineTo(p.cx - r, p.cy + r);
+        ctx.stroke();
+    }
+
+    _renderMarks() {
+        const ctx = this.ctx;
+        const { cell } = this._layout;
+
+        if (this.lastMove && this.cells[this.lastMove.y] && this.cells[this.lastMove.y][this.lastMove.x] !== EMPTY) {
+            const p = this._stoneGeometry(this.lastMove.x, this.lastMove.y);
+            ctx.fillStyle = this.cells[this.lastMove.y][this.lastMove.x] === BLACK ? '#FFFFFF' : '#1A1A1A';
+            ctx.beginPath();
+            ctx.arc(p.cx, p.cy, cell * 0.1, 0, Math.PI * 2);
+            ctx.fill();
         }
 
-        // 悬停预览
-        if (this._hoverPos && this._hoverColor) {
-            const h = this._hoverPos;
-            if (this.cells[h.y][h.x] === EMPTY) {
+        if (this.koPoint) {
+            const p = this._stoneGeometry(this.koPoint.x, this.koPoint.y);
+            const s = cell * 0.22;
+            ctx.strokeStyle = 'rgba(231, 76, 60, 0.85)';
+            ctx.lineWidth = Math.max(1.5, cell * 0.06);
+            ctx.strokeRect(p.cx - s, p.cy - s, s * 2, s * 2);
+        }
+
+        if (this.winLine && this.winLine.length >= 2) {
+            const first = this._stoneGeometry(this.winLine[0].x, this.winLine[0].y);
+            const last = this._stoneGeometry(this.winLine[this.winLine.length - 1].x, this.winLine[this.winLine.length - 1].y);
+            ctx.save();
+            ctx.strokeStyle = COLORS.win;
+            ctx.lineWidth = Math.max(2, cell * 0.08);
+            ctx.shadowColor = 'rgba(255, 68, 68, 0.8)';
+            ctx.shadowBlur = cell * 0.35;
+            ctx.beginPath();
+            ctx.moveTo(first.cx, first.cy);
+            ctx.lineTo(last.cx, last.cy);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        if (this._hover && this.interactive && !this.deadMarking) {
+            const x = this._hover.x;
+            const y = this._hover.y;
+            if (this.cells[y][x] === EMPTY) {
                 ctx.globalAlpha = 0.3;
-                this._drawStone(h.x, h.y, this._hoverColor);
+                this._drawStone(x, y, this._hoverColor || BLACK);
                 ctx.globalAlpha = 1;
             }
         }
     }
 
-    _getStarPoints() {
-        if (this.size === 19) {
-            // 标准围棋19路星位
-            const pts = [3, 9, 15];
-            const result = [];
-            for (const r of pts) {
-                for (const c of pts) {
-                    result.push({ r, c });
-                }
-            }
-            return result;
-        } else if (this.size === 15) {
-            const pts = [3, 7, 11];
-            const result = [];
-            for (const r of pts) {
-                for (const c of pts) {
-                    result.push({ r, c });
-                }
-            }
-            return result;
-        } else if (this.size === 9) {
-            const pts = [2, 4, 6];
-            const result = [];
-            for (const r of pts) {
-                for (const c of pts) {
-                    result.push({ r, c });
-                }
-            }
-            return result;
-        }
-        return [];
-    }
-
-    _drawStone(col, row, color) {
+    _renderCursor() {
+        if (!this._cursor || !this.interactive) return;
+        const p = this._stoneGeometry(this._cursor.x, this._cursor.y);
         const ctx = this.ctx;
-        const p = this._padding;
-        const cs = this._cellSize;
-        const cx = p + col * cs;
-        const cy = p + row * cs;
-        const radius = cs * 0.42;
-
-        // 阴影
-        ctx.fillStyle = 'rgba(0,0,0,0.1)';
-        ctx.beginPath();
-        ctx.arc(cx + 2, cy + 2, radius, 0, Math.PI * 2);
-        ctx.fill();
-
-        if (color === BLACK) {
-            ctx.fillStyle = '#1A1A1A';
-            ctx.beginPath();
-            ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-            ctx.fill();
-        } else {
-            ctx.fillStyle = '#FFFFFF';
-            ctx.beginPath();
-            ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.strokeStyle = '#1A1A1A';
-            ctx.lineWidth = 1;
-            ctx.stroke();
-        }
+        ctx.strokeStyle = COLORS.accent;
+        ctx.lineWidth = 2;
+        const s = this._layout.cell * 0.5;
+        ctx.strokeRect(p.cx - s, p.cy - s, s * 2, s * 2);
     }
 
     setHoverColor(color) {
         this._hoverColor = color;
     }
 
-    getCellSize() {
-        return this._cellSize;
-    }
-
-    getPadding() {
-        return this._padding;
+    dispose() {
+        this.canvas.removeEventListener('pointerdown', this._onPointerDown);
+        this.canvas.removeEventListener('pointermove', this._onPointerMove);
+        this.canvas.removeEventListener('pointerleave', this._onPointerLeave);
+        this.canvas.removeEventListener('keydown', this._onKeyDown);
+        if (this._resizeObserver) this._resizeObserver.disconnect();
+        if (this._windowResize) window.removeEventListener('resize', this._windowResize);
+        if (this._raf) cancelAnimationFrame(this._raf);
+        this._raf = 0;
     }
 }
-
-export { EMPTY, BLACK, WHITE };
