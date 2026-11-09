@@ -53,6 +53,9 @@ export class BoardView {
         this._hover = null;
         this._cursor = null;
         this._animations = new Map();
+        this._motionQuery = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+            ? window.matchMedia('(prefers-reduced-motion: reduce)')
+            : null;
         this._raf = 0;
         this._layout = { side: 0, padding: 0, cell: 0 };
         this._static = null;
@@ -91,7 +94,7 @@ export class BoardView {
         this.deadStones = new Set(state.deadStones || []);
 
         const lm = this.lastMove;
-        if (lm && previous.length === this.size && previous[lm.y] && previous[lm.y][lm.x] === EMPTY &&
+        if (!this._reducedMotion() && lm && previous.length === this.size && previous[lm.y] && previous[lm.y][lm.x] === EMPTY &&
             this.cells[lm.y][lm.x] !== EMPTY) {
             const color = this.cells[lm.y][lm.x];
             this._animations.set(`${lm.x},${lm.y}`, {
@@ -218,7 +221,15 @@ export class BoardView {
         }
     }
 
+    _reducedMotion() {
+        return Boolean(this._motionQuery && this._motionQuery.matches);
+    }
+
     _startAnimationLoop() {
+        if (this._reducedMotion()) {
+            this._animations.clear();
+            return;
+        }
         if (this._raf || this._animations.size === 0) return;
         const tick = () => {
             this._raf = 0;
