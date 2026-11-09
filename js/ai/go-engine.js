@@ -89,14 +89,14 @@ function atariBonus(cells, x, y, color, size) {
 /**
  * 评估一次落子（不修改原盘面）。
  */
-function evaluateCandidate(cells, x, y, color, koPoint) {
+function evaluateCandidate(cells, x, y, color, koPoint, historyKeys) {
     const size = cells.length;
     const trial = {
         size,
         cells: cloneBoard(cells),
         koPoint,
-        superko: false,
-        historyKeys: new Set()
+        superko: true,
+        historyKeys: new Set(historyKeys)
     };
     const result = placeStone(trial, x, y, color);
     if (!result.ok) return null;
@@ -113,11 +113,14 @@ function evaluateCandidate(cells, x, y, color, koPoint) {
 
     score += atariBonus(trial.cells, x, y, color, size);
 
-    // 避免填自己的眼：四周都是己方且己方棋组气数少
+    // 连接：与己方棋子相邻越多越有价值（避免十字/拆边的散着）
     let friendly = 0;
     for (const nb of neighbors(size, x, y)) {
         if (cells[nb.y][nb.x] === color) friendly++;
     }
+    score += Math.min(18, friendly * 6);
+
+    // 避免填自己的眼：四周都是己方且己方棋组气数少
     if (friendly >= 3 && group.libertiesCount <= 2) score -= 35;
 
     return score;
@@ -160,16 +163,17 @@ export function search(cells, myColor, options = {}) {
     const rng = options.rng || Math.random;
     const komi = options.komi ?? DEFAULT_KOMI[size] ?? 7.5;
     const koPoint = options.koPoint || null;
+    const historyKeys = new Set(options.historyKeys || []);
 
-    const candidates = candidatesFor(cells);
+    const candidates = candidatesFor(cells).slice(0, preset.candidates);
     const scored = [];
     let maxScore = -Infinity;
 
     for (const move of candidates) {
         if (Date.now() - startedAt > preset.timeBudgetMs) break;
-        const attack = evaluateCandidate(cells, move.x, move.y, myColor, koPoint);
+        const attack = evaluateCandidate(cells, move.x, move.y, myColor, koPoint, historyKeys);
         if (attack === null) continue;
-        const defense = evaluateCandidate(cells, move.x, move.y, opponent(myColor), koPoint) ?? 0;
+        const defense = evaluateCandidate(cells, move.x, move.y, opponent(myColor), koPoint, historyKeys) ?? 0;
         const total = attack + defense * 0.6;
         scored.push({ ...move, score: total });
         if (total > maxScore) maxScore = total;

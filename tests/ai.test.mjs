@@ -12,7 +12,7 @@ import {
     SHAPE_SCORES
 } from '../js/ai/patterns.js';
 import { search as searchGomoku } from '../js/ai/gomoku-engine.js';
-import { search as searchGo } from '../js/ai/go-engine.js';
+import { search as searchGo, boardKey } from '../js/ai/go-engine.js';
 
 function setup(size, stones) {
     const cells = createEmptyBoard(size);
@@ -140,6 +140,37 @@ test('五子棋引擎在 easy 难度下可直接选中前几候选', () => {
     });
     assert.ok(result.bestMove);
     assert.equal(cells[result.bestMove.y][result.bestMove.x], EMPTY);
+});
+
+test('围棋引擎不选择会触发位置超级劫的点', () => {
+    const size = 9;
+    const cells = setup(size, [
+        [2, 2, BLACK], [2, 3, BLACK], [3, 2, BLACK],
+        [4, 4, WHITE], [5, 5, WHITE]
+    ]);
+    const probe = { x: 3, y: 3 };
+    const after = cells.map((row) => row.slice());
+    after[probe.y][probe.x] = BLACK;
+    const historyKeys = [boardKey(after)];
+
+    const forbidden = searchGo(cells, BLACK, {
+        level: 'hard',
+        komi: 5.5,
+        historyKeys,
+        rng: () => 0
+    });
+    if (forbidden.bestMove) {
+        assert.ok(!(forbidden.bestMove.x === probe.x && forbidden.bestMove.y === probe.y),
+            `不应选择会重复局面的点 (${probe.x},${probe.y})`);
+    }
+
+    const allowed = searchGo(cells, BLACK, {
+        level: 'hard',
+        komi: 5.5,
+        historyKeys: [],
+        rng: () => 0
+    });
+    assert.ok(allowed.bestMove || allowed.pass);
 });
 
 test('围棋引擎在空盘选择天元附近', () => {

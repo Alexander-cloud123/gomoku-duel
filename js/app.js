@@ -297,6 +297,7 @@ function scheduleLocalAI() {
             captures: currentGame.captures,
             komi: currentGame.settings.komi,
             koPoint: currentGame.koPoint,
+            historyKeys: Array.from(currentGame.historyKeys),
             options: { level: app.profile.difficulty }
         });
 
@@ -867,6 +868,7 @@ function scheduleHints() {
             captures: game.captures,
             komi: game.settings.komi,
             koPoint: game.koPoint,
+            historyKeys: Array.from(game.historyKeys),
             options: { level: 'hint' }
         });
         if (!result) return;

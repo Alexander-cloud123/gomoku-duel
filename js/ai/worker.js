@@ -8,10 +8,14 @@ self.onmessage = (event) => {
 
     try {
         let result;
+        const options = { ...(request.options || {}) };
         if (request.mode === 'go') {
-            result = searchGo(request.cells, request.myColor, request.options || {});
+            options.komi = request.komi;
+            options.koPoint = request.koPoint;
+            options.historyKeys = request.historyKeys;
+            result = searchGo(request.cells, request.myColor, options);
         } else {
-            result = searchGomoku(request.cells, request.myColor, request.options || {});
+            result = searchGomoku(request.cells, request.myColor, options);
         }
         self.postMessage({ id, ok: true, result });
     } catch (err) {

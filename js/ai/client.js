@@ -54,6 +54,7 @@ export class AIClient {
                 captures: request.captures,
                 komi: request.komi,
                 koPoint: request.koPoint,
+                historyKeys: request.historyKeys,
                 options: request.options || {}
             };
 
@@ -107,7 +108,8 @@ export class AIClient {
                     ...options,
                     captures: payload.captures,
                     komi: payload.komi,
-                    koPoint: payload.koPoint
+                    koPoint: payload.koPoint,
+                    historyKeys: payload.historyKeys
                 })
                 : this._fallbackModules.gomoku(payload.cells, payload.myColor, options);
 
