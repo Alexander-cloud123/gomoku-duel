@@ -1,5 +1,4 @@
 // js/net/webrtc.js - WebRTC 传输层（PeerJS 封装：建连、消息、断线、错误分类）
-import { createRoomId } from '../room.js';
 import { makeEnvelope, TYPES, PROTOCOL_VERSION } from './protocol.js';
 
 const DEFAULT_ICE = [
@@ -114,7 +113,8 @@ export class Transport {
         this.role = 'host';
         this.roomCode = roomCode;
         this.gameMode = gameMode;
-        const peerId = createRoomId(roomCode, gameMode);
+        // Peer id 直接使用房间号：棋种由握手协商，便于「模式不匹配 → 切换后重入」
+        const peerId = roomCode;
 
         return new Promise((resolve, reject) => {
             let settled = false;
@@ -194,7 +194,7 @@ export class Transport {
             () => ({ code: 'TIMEOUT', message: '连接信令服务器超时，请检查网络' })
         );
 
-        const targetId = createRoomId(roomCode, gameMode);
+        const targetId = roomCode;
         const conn = this.peer.connect(targetId, { reliable: true, serialization: 'json' });
 
         await waitFor(
@@ -288,8 +288,7 @@ export class Transport {
         if (this.role !== 'guest' || !this.peer || this._destroyed) {
             throw { code: 'NO_PEER', message: '无法重连' };
         }
-        const targetId = createRoomId(this.roomCode, this.gameMode);
-        const conn = this.peer.connect(targetId, { reliable: true, serialization: 'json' });
+        const conn = this.peer.connect(this.roomCode, { reliable: true, serialization: 'json' });
         await waitFor(
             (success, failure) => {
                 if (conn.open) success();
@@ -304,12 +303,17 @@ export class Transport {
         this._attach(conn);
     }
 
-    close() {
-        this._destroyed = true;
+    /** 只关闭当前连接，保留 peer（房主拒绝某个访客后房间仍可加入）。 */
+    closeConnection() {
         if (this.conn) {
             try { this.conn.close(); } catch { /* ignore */ }
             this.conn = null;
         }
+    }
+
+    close() {
+        this.closeConnection();
+        this._destroyed = true;
         if (this.peer) {
             try { this.peer.destroy(); } catch { /* ignore */ }
             this.peer = null;

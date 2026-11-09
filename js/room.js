@@ -10,11 +10,6 @@ export function generateRoomCode() {
     return code;
 }
 
-export function createRoomId(code, gameMode = 'gomoku') {
-    const prefix = gameMode === 'go' ? 'go-' : 'gomoku-';
-    return prefix + code;
-}
-
 export function hasAssistant(roomCode) {
     return roomCode.endsWith('*');
 }

@@ -59,6 +59,8 @@ export class Session {
         this.lastSyncRequestAt = 0;
         this.reconnectUntil = 0;
         this._reconnecting = false;
+        this._versionRejected = false;
+        this._rejectTimer = null;
         this._heartbeatTimer = null;
         this._reconnectTimer = null;
         this._guestReconnectTimer = null;
@@ -140,6 +142,9 @@ export class Session {
 
     _onTransportOpen() {
         if (this.state === 'ready') return;
+        // 新连接从序号 0 重新协商：房主可能先后接待多个握手尝试
+        this.seq = 0;
+        this.lastSeq = 0;
         this.state = 'handshaking';
         this.remoteHello = null;
         this.remoteAck = false;
@@ -171,6 +176,19 @@ export class Session {
         this.lastMessageAt = Date.now();
         const checked = validateEnvelope(data);
         if (!checked.ok) {
+            if (checked.reason === 'version' && !this._versionRejected) {
+                this._versionRejected = true;
+                this._notify('error', '协议版本不一致，已终止会话');
+                this._send(TYPES.REJECT, {
+                    code: REJECT_CODES.PROTO_MISMATCH,
+                    message: '双方协议版本不一致，请刷新页面后重试'
+                });
+                this._rejectSession({
+                    code: REJECT_CODES.PROTO_MISMATCH,
+                    message: '双方协议版本不一致'
+                }, { keepRoom: this.role === 'host' });
+                return;
+            }
             this._notify('warning', `收到无法识别的消息（${checked.reason}）`);
             return;
         }
@@ -279,7 +297,10 @@ export class Session {
                 code: REJECT_CODES.PROTO_MISMATCH,
                 message: '双方游戏版本不一致，请刷新页面后重试'
             });
-            this._onPeerLeft('协议版本不一致');
+            this._rejectSession({
+                code: REJECT_CODES.PROTO_MISMATCH,
+                message: '双方游戏版本不一致'
+            }, { keepRoom: this.role === 'host' });
             return;
         }
 
@@ -295,7 +316,7 @@ export class Session {
                     code: REJECT_CODES.MODE_MISMATCH,
                     actualMode: this.game.mode,
                     message: '对手选择的模式与本房间不一致'
-                });
+                }, { keepRoom: true });
             } else {
                 this._send(TYPES.REJECT, {
                     code: REJECT_CODES.MODE_MISMATCH,
@@ -349,6 +370,10 @@ export class Session {
         const wasReconnecting = this._reconnecting;
         this._reconnecting = false;
         this.state = 'ready';
+        if (this._rejectTimer) {
+            clearTimeout(this._rejectTimer);
+            this._rejectTimer = null;
+        }
         this.pendingRequest = null;
         this.lastPongAt = Date.now();
         this.lastMessageAt = Date.now();
@@ -370,12 +395,23 @@ export class Session {
         this.callbacks.onStatus?.({ state: 'failed', message: payload.message || '连接被拒绝' });
     }
 
-    /** 主动拒绝/终止会话（不触发「对手已离开」提示）。 */
-    _rejectSession(info) {
-        this.state = 'failed';
-        this._reconnecting = false;
+    /** 主动拒绝/终止会话（不触发「对手已离开」提示）。keepRoom 用于房主拒绝单个访客时保留房间。 */
+    _rejectSession(info, { keepRoom = false } = {}) {
         this._stopHeartbeat();
         this._clearReconnectTimers();
+        this._reconnecting = false;
+        if (keepRoom && this.role === 'host') {
+            this.state = 'waiting';
+            // 先让 REJECT 送达；访客收到后会主动断开，这里只做兜底清理
+            this._rejectTimer = detachTimer(setTimeout(() => {
+                if (this.state === 'waiting' && this.transport.hasConnection?.()) {
+                    this.transport.closeConnection?.();
+                }
+            }, 2000));
+            this.callbacks.onStatus?.({ state: 'waiting', message: '等待对手加入…' });
+            return;
+        }
+        this.state = 'failed';
         this.transport.close();
         this.callbacks.onReject?.(info);
         this.callbacks.onStatus?.({ state: 'failed', message: info.message || '连接已终止' });
@@ -420,7 +456,6 @@ export class Session {
             this._enterReconnecting('连接中断，正在尝试恢复…');
         }
     }
-
     _enterReconnecting(message) {
         if (this.state === 'reconnecting' || this.state === 'left' || this.state === 'failed') return;
         this._stopHeartbeat();
@@ -774,6 +809,10 @@ export class Session {
         this._reconnecting = false;
         this._stopHeartbeat();
         this._clearReconnectTimers();
+        if (this._rejectTimer) {
+            clearTimeout(this._rejectTimer);
+            this._rejectTimer = null;
+        }
         this.transport.close();
     }
 }

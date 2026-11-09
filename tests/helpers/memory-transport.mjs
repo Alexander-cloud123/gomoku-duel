@@ -54,6 +54,7 @@ export class MemoryTransport {
         this.onClose = null;
         this.onError = null;
         this.onPeerStatus = null;
+        this.sent = [];
     }
 
     link(other) {
@@ -120,6 +121,7 @@ export class MemoryTransport {
 
     sendRaw(data) {
         if (!this.conn || !this.conn.open) return false;
+        this.sent.push(clone(data));
         this.conn.send(data);
         return true;
     }
@@ -131,6 +133,11 @@ export class MemoryTransport {
 
     /** 模拟网络中断：关闭当前连接但保留传输层。 */
     disconnect() {
+        if (this.conn) this.conn.close();
+    }
+
+    /** 仅关闭当前连接，保留传输层（对应 WebRTC Transport.closeConnection）。 */
+    closeConnection() {
         if (this.conn) this.conn.close();
     }
 

@@ -233,3 +233,82 @@ test('断线后自动重连并重同步', async () => {
     await waitFor(() => pair.hostGame.stateHash() === pair.guestGame.stateHash(), 2000, '状态一致');
     assert.equal(pair.guestGame.moveHistory.length, 1);
 });
+
+test('模式不匹配：房主拒绝后保留房间，访客切模后可重新加入', async () => {
+    const hostGame = new Game({ mode: MODES.GOMOKU });
+    hostGame.start({ myColor: BLACK });
+    const guestGame = new Game({ mode: MODES.GO, size: 9 });
+    guestGame.start({ myColor: WHITE });
+
+    const hostTransport = new MemoryTransport('host');
+    const guestTransport = new MemoryTransport('guest');
+    hostTransport.link(guestTransport);
+
+    const hostEvents = { reject: null, statuses: [] };
+    const guestEvents = { reject: null, statuses: [] };
+
+    const hostSession = new Session({
+        transport: hostTransport,
+        game: hostGame,
+        role: 'host',
+        name: '房主',
+        timing: FAST_TIMING,
+        callbacks: {
+            onStatus: (s) => hostEvents.statuses.push(s),
+            onReject: (info) => { hostEvents.reject = info; }
+        }
+    });
+    const guestSession = new Session({
+        transport: guestTransport,
+        game: guestGame,
+        role: 'guest',
+        name: '访客',
+        timing: FAST_TIMING,
+        callbacks: {
+            onStatus: (s) => guestEvents.statuses.push(s),
+            onReject: (info) => { guestEvents.reject = info; }
+        }
+    });
+
+    await hostSession.hostRoom('ABCDEF');
+    await guestSession.joinRoom('ABCDEF');
+    await waitFor(() => guestEvents.reject !== null, 2000, '访客收到模式不一致拒绝');
+
+    assert.equal(guestEvents.reject.code, 'MODE_MISMATCH');
+    assert.equal(guestEvents.reject.actualMode, MODES.GOMOKU);
+    assert.equal(hostSession.state, 'waiting', '房主应回到等待态而非结束会话');
+    assert.equal(hostTransport.hasConnection(), false, '房主应只关闭本次连接');
+    assert.equal(hostEvents.reject, null, '房主不应触发会话级拒绝回调');
+    await waitFor(() => hostTransport.hasConnection() === false, 1000, '房主连接已释放');
+
+    // 访客按 actualMode 重新加入同一房间
+    const retryGame = new Game({ mode: MODES.GOMOKU });
+    retryGame.start({ myColor: WHITE });
+    const retryTransport = new MemoryTransport('guest-retry');
+    retryTransport.link(hostTransport);
+    const retrySession = new Session({
+        transport: retryTransport,
+        game: retryGame,
+        role: 'guest',
+        name: '访客2',
+        timing: FAST_TIMING,
+        callbacks: {}
+    });
+
+    await retrySession.joinRoom('ABCDEF');
+    await waitFor(() => hostSession.isReady && retrySession.isReady, 3000, '正确模式重新握手成功');
+    assert.equal(hostSession.isReady, true);
+});
+
+test('信封协议版本不一致时发送 REJECT 并终止会话', async () => {
+    const pair = createPair();
+    await connect(pair);
+
+    pair.guestSession._onRawMessage({ v: 2, seq: 999, t: TYPES.PING, p: {} });
+    await waitFor(() => pair.guestEvents.reject !== null, 1000, '访客收到协议拒绝');
+
+    assert.equal(pair.guestEvents.reject.code, 'PROTO_MISMATCH');
+    assert.equal(pair.guestSession.state, 'failed');
+    const reject = pair.guestTransport.sent.filter((m) => m.t === TYPES.REJECT).at(-1);
+    assert.equal(reject.p.code, 'PROTO_MISMATCH');
+});

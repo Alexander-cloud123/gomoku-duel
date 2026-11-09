@@ -10,8 +10,8 @@
 { "v": 1, "seq": 12, "t": "MOVE", "p": { "x": 7, "y": 7, "color": 1, "turnSeq": 5 } }
 ```
 
-- `v`：协议版本，当前为 `1`，不一致会拒绝
-- `seq`：发送方单调递增序号，从 1 开始；接收方丢弃 `seq <= lastSeq`，缺口触发重同步
+- `v`：协议版本，当前为 `1`；不一致时接收方回 `REJECT{PROTO_MISMATCH}` 并终止本次连接
+- `seq`：发送方单调递增序号，从 1 开始；接收方丢弃 `seq <= lastSeq`，缺口触发重同步；**每个新连接从 0 重新计数**
 - `t`：消息类型
 - `p`：载荷；单条消息上限 64 KB
 
@@ -33,7 +33,7 @@
 收到 `HELLO` 后回复 `HELLO_ACK`（字段同 `HELLO`）。两端都收到 `HELLO` 且发出/收到 `HELLO_ACK` 后进入 `ready`。
 
 - **房主权威**：棋种、棋盘尺寸、贴目、辅助开关、悔棋上限以房主为准
-- 棋种不一致：房主回 `REJECT{MODE_MISMATCH, actualMode}` 并关闭连接；访客收到后切换到 `actualMode` 重新加入
+- 棋种不一致：房主回 `REJECT{MODE_MISMATCH, actualMode}` 并只关闭这一条连接（房间保留、等待下一位访客）；访客收到后切换到 `actualMode` 重新加入同一房间
 - 协议版本不一致：`REJECT{PROTO_MISMATCH}`
 - 已有连接时新连接会被 `REJECT{ROOM_FULL}` 拒绝
 
@@ -79,7 +79,8 @@
 - 未完成握手前只接受 `HELLO / HELLO_ACK / REJECT / ERROR / PING / PONG`
 - 所有载荷都经过字段类型、范围与枚举校验；非法消息被丢弃并提示
 - 悔棋 / 和棋 / 再来一局 5 秒冷却，且同时只允许一个待处理请求
-- 房间号 6 位（去掉了 I/O/0/1），PeerJS id 带 `gomoku-` / `go-` 前缀
+- 房间号 6 位（去掉了 I/O/0/1），PeerJS id 即房间号本身（不带棋种前缀，棋种由握手协商）
+- 同一房间号在五子棋/围棋间不区分：先到者建房，后来者由 `MODE_MISMATCH` 引导切换
 
 ## 已知边界
 

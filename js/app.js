@@ -474,9 +474,10 @@ function handleReject(info) {
         showPage(PAGES.HOME);
         return;
     }
-    if (info.code === 'MODE_MISMATCH' && info.actualMode) {
+    if (info.code === 'MODE_MISMATCH' && info.actualMode && info.actualMode !== app.mode) {
         const actual = info.actualMode === MODES.GO ? MODES.GO : MODES.GOMOKU;
         const label = actual === MODES.GO ? '围棋' : '五子棋';
+        teardownSession();
         app.mode = actual;
         applyModeUI();
         showToast(`房间是${label}模式，正在切换并重新加入…`, 'info');
