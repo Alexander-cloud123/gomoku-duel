@@ -300,6 +300,32 @@ test('模式不匹配：房主拒绝后保留房间，访客切模后可重新�
     assert.equal(hostSession.isReady, true);
 });
 
+test('点目阶段的和棋申请被忽略，不会结束未确认的数子', async () => {
+    const pair = createPair({ mode: MODES.GO, size: 9 });
+    await connect(pair);
+    pair.hostSession.sendPass();
+    await waitFor(() => pair.guestGame.moveHistory.length === 1, 2000, '房主虚手同步');
+    pair.guestSession.sendPass();
+    await waitFor(() => pair.hostGame.phase === 'scoring' && pair.guestGame.phase === 'scoring', 2000, '进入点目');
+
+    assert.deepEqual(pair.hostSession.requestDraw(), { ok: false, reason: 'not-playing' });
+    pair.guestSession._onDrawRequest();
+    assert.equal(pair.guestEvents.requests.length, 0, '点目阶段不应弹出和棋确认');
+    pair.guestSession._onDrawAccept();
+    assert.equal(pair.guestGame.isOver, false);
+});
+
+test('断线期间认输被拒绝，不会单端结算', async () => {
+    const pair = createPair();
+    await connect(pair);
+    pair.guestTransport.disconnect();
+    await waitFor(() => pair.guestSession.state === 'reconnecting', 2000, '访客进入重连');
+
+    assert.deepEqual(pair.guestSession.resign(), { ok: false, reason: 'not-connected' });
+    assert.equal(pair.guestGame.isOver, false);
+    assert.equal(pair.hostGame.isOver, false);
+});
+
 test('信封协议版本不一致时发送 REJECT 并终止会话', async () => {
     const pair = createPair();
     await connect(pair);

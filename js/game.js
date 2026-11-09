@@ -257,7 +257,7 @@ export class Game {
     }
 
     finishDraw() {
-        if (this.phase === PHASES.FINISHED) return false;
+        if (this.phase !== PHASES.PLAYING || this.isOver) return false;
         this._finish({ winner: null, reason: 'draw' });
         return true;
     }
@@ -271,7 +271,8 @@ export class Game {
         return true;
     }
 
-    resign(color) {        if (this.phase === PHASES.IDLE || this.phase === PHASES.FINISHED) {
+    resign(color) {
+        if (this.phase === PHASES.IDLE || this.phase === PHASES.FINISHED || this.phase === PHASES.SCORING) {
             return { ok: false, reason: 'not-playing' };
         }
         this._finish({ winner: opponent(color), reason: 'resign' });

@@ -106,6 +106,19 @@ test('点目阶段切换死子会清空确认', () => {
     assert.equal(game.deadStones.size, 1);
 });
 
+test('点目阶段禁止和棋与认输', () => {
+    const game = newGame(MODES.GO, 9, { komi: 5.5 });
+    game.start({ myColor: BLACK });
+    game.pass(BLACK);
+    game.pass(WHITE);
+    assert.equal(game.phase, PHASES.SCORING);
+
+    assert.equal(game.finishDraw(), false);
+    assert.equal(game.resign(BLACK).ok, false);
+    assert.equal(game.phase, PHASES.SCORING);
+    assert.equal(game.isOver, false);
+});
+
 test('快照/恢复保持盘面与历史一致', () => {
     const game = newGame(MODES.GOMOKU, 15, { undoLimit: 3 });
     game.start({ myColor: BLACK });

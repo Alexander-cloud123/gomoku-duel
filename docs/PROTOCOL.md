@@ -58,6 +58,9 @@
 | `BYE` | 双 | `{}` | 主动离开 |
 | `ERROR` | 双 | `{code, message}` | 通用错误通知 |
 
+- `DRAW_REQUEST` 与 `RESIGN` 仅在 `playing` 阶段有效；进入 `scoring` 后只能通过双方 `SCORE_CONFIRM` 结束对局
+- `BYE` 只在握手完成后（`ready`）被接受，握手前收到会被忽略
+
 ## 一致性
 
 - 落子只在本地 `Game` 上执行一次；收到 `MOVE` 时校验颜色、`turnSeq` 与回合合法性，失败则请求重同步

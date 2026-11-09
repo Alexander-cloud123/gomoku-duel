@@ -221,9 +221,6 @@ export class Session {
             case TYPES.ERROR:
                 this._notify('error', payload.message || '对端报告错误');
                 return;
-            case TYPES.BYE:
-                this._onPeerLeft('对手已离开房间');
-                return;
             default:
                 break;
         }
@@ -234,6 +231,9 @@ export class Session {
         }
 
         switch (type) {
+            case TYPES.BYE:
+                this._onPeerLeft('对手已离开房间');
+                break;
             case TYPES.MOVE:
                 this._onMove(payload);
                 break;
@@ -602,6 +602,7 @@ export class Session {
     // ===== 和棋 =====
 
     requestDraw() {
+        if (this.game.phase !== 'playing') return { ok: false, reason: 'not-playing' };
         if (this.pendingRequest) return { ok: false, reason: 'busy' };
         if (this.game.isOver) return { ok: false, reason: 'finished' };
         if (Date.now() - this.lastRequestAt < REQUEST_COOLDOWN) return { ok: false, reason: 'cooldown' };
@@ -612,6 +613,7 @@ export class Session {
     }
 
     _onDrawRequest() {
+        if (this.game.phase !== 'playing') return;
         if (this.pendingRequest) {
             this._send(TYPES.DRAW_REJECT, {});
             return;
@@ -633,6 +635,7 @@ export class Session {
     }
 
     _onDrawAccept() {
+        if (this.game.phase !== 'playing') return;
         if (!this.pendingRequest || this.pendingRequest.kind !== 'draw-sent') return;
         this.pendingRequest = null;
         this.game.finishDraw();
@@ -647,6 +650,7 @@ export class Session {
     // ===== 认输 =====
 
     resign() {
+        if (this.state !== 'ready') return { ok: false, reason: 'not-connected' };
         if (this.game.isOver) return { ok: false, reason: 'finished' };
         const result = this.game.resign(this.game.myColor);
         if (!result.ok) return result;
