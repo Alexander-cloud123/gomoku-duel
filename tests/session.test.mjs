@@ -235,7 +235,7 @@ test('断线后自动重连并重同步', async () => {
     assert.equal(pair.guestGame.moveHistory.length, 1);
 });
 
-test('模式不匹配：房主拒绝后保留房间，访客切模后可重新加入', async () => {
+test('模式不匹配：访客在握手阶段自动采用房主棋种', async () => {
     const hostGame = new Game({ mode: MODES.GOMOKU });
     hostGame.start({ myColor: BLACK });
     const guestGame = new Game({ mode: MODES.GO, size: 9 });
@@ -245,8 +245,8 @@ test('模式不匹配：房主拒绝后保留房间，访客切模后可重新�
     const guestTransport = new MemoryTransport('guest');
     hostTransport.link(guestTransport);
 
-    const hostEvents = { reject: null, statuses: [] };
-    const guestEvents = { reject: null, statuses: [] };
+    const hostEvents = { statuses: [] };
+    const guestEvents = { statuses: [], remoteSettings: [] };
 
     const hostSession = new Session({
         transport: hostTransport,
@@ -254,10 +254,7 @@ test('模式不匹配：房主拒绝后保留房间，访客切模后可重新�
         role: 'host',
         name: '房主',
         timing: FAST_TIMING,
-        callbacks: {
-            onStatus: (s) => hostEvents.statuses.push(s),
-            onReject: (info) => { hostEvents.reject = info; }
-        }
+        callbacks: { onStatus: (s) => hostEvents.statuses.push(s) }
     });
     const guestSession = new Session({
         transport: guestTransport,
@@ -267,38 +264,23 @@ test('模式不匹配：房主拒绝后保留房间，访客切模后可重新�
         timing: FAST_TIMING,
         callbacks: {
             onStatus: (s) => guestEvents.statuses.push(s),
-            onReject: (info) => { guestEvents.reject = info; }
+            onRemoteSettings: (settings) => {
+                guestEvents.remoteSettings.push(settings);
+                const game = new Game({ mode: settings.mode, size: settings.size, settings });
+                game.start({ myColor: WHITE });
+                return game;
+            }
         }
     });
 
     await hostSession.hostRoom('ABCDEF');
     await guestSession.joinRoom('ABCDEF');
-    await waitFor(() => guestEvents.reject !== null, 2000, '访客收到模式不一致拒绝');
+    await waitFor(() => hostSession.isReady && guestSession.isReady, 3000, '握手完成');
 
-    assert.equal(guestEvents.reject.code, 'MODE_MISMATCH');
-    assert.equal(guestEvents.reject.actualMode, MODES.GOMOKU);
-    assert.equal(hostSession.state, 'waiting', '房主应回到等待态而非结束会话');
-    assert.equal(hostTransport.hasConnection(), false, '房主应只关闭本次连接');
-    assert.equal(hostEvents.reject, null, '房主不应触发会话级拒绝回调');
-    await waitFor(() => hostTransport.hasConnection() === false, 1000, '房主连接已释放');
-
-    // 访客按 actualMode 重新加入同一房间
-    const retryGame = new Game({ mode: MODES.GOMOKU });
-    retryGame.start({ myColor: WHITE });
-    const retryTransport = new MemoryTransport('guest-retry');
-    retryTransport.link(hostTransport);
-    const retrySession = new Session({
-        transport: retryTransport,
-        game: retryGame,
-        role: 'guest',
-        name: '访客2',
-        timing: FAST_TIMING,
-        callbacks: {}
-    });
-
-    await retrySession.joinRoom('ABCDEF');
-    await waitFor(() => hostSession.isReady && retrySession.isReady, 3000, '正确模式重新握手成功');
-    assert.equal(hostSession.isReady, true);
+    assert.equal(guestSession.game.mode, MODES.GOMOKU, '访客应采用房主棋种');
+    assert.equal(guestSession.game.size, 15);
+    assert.equal(guestEvents.remoteSettings.length, 1);
+    assert.equal(hostSession.state, 'ready');
 });
 
 test('点目阶段的和棋申请被忽略，不会结束未确认的数子', async () => {

@@ -375,6 +375,7 @@ function sessionCallbacks() {
             }).then(() => exitToHome());
         },
         onRemoteSettings: (settings) => {
+            const modeChanged = settings.mode !== app.mode;
             app.mode = settings.mode;
             app.profile.goSize = settings.size;
             app.profile.komi = settings.komi;
@@ -382,6 +383,10 @@ function sessionCallbacks() {
             saveProfile(app.profile);
             fillControls();
             applyModeUI();
+            if (modeChanged) {
+                const label = settings.mode === MODES.GO ? '围棋' : '五子棋';
+                showToast(`房间是${label}模式，已按房主设置切换`, 'info');
+            }
             return setupMatch({
                 mode: settings.mode,
                 size: settings.size,
@@ -473,19 +478,6 @@ function handleReject(info) {
         showToast(info.message || '房间连接被拒绝', 'error');
         teardownSession();
         showPage(PAGES.HOME);
-        return;
-    }
-    if (info.code === 'MODE_MISMATCH' && info.actualMode && info.actualMode !== app.mode) {
-        const actual = info.actualMode === MODES.GO ? MODES.GO : MODES.GOMOKU;
-        const label = actual === MODES.GO ? '围棋' : '五子棋';
-        teardownSession();
-        app.mode = actual;
-        applyModeUI();
-        showToast(`房间是${label}模式，正在切换并重新加入…`, 'info');
-        const code = app.roomCode;
-        setTimeout(() => {
-            joinRoom(code);
-        }, 300);
         return;
     }
     showToast(info.message || '连接被拒绝', 'error');

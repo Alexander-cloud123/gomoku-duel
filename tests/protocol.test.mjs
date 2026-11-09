@@ -120,5 +120,5 @@ test('快照缺失可选字段时仍可通过校验（兼容旧客户端）', ()
 
 test('拒绝码常量覆盖关键场景', () => {
     assert.ok(Object.values(REJECT_CODES).includes('ROOM_FULL'));
-    assert.ok(Object.values(REJECT_CODES).includes('MODE_MISMATCH'));
+    assert.ok(Object.values(REJECT_CODES).includes('PROTO_MISMATCH'));
 });

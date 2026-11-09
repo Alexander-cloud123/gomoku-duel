@@ -304,33 +304,7 @@ export class Session {
             return;
         }
 
-        if (payload.mode !== this.game.mode) {
-            if (this.role === 'host') {
-                this._send(TYPES.REJECT, {
-                    code: REJECT_CODES.MODE_MISMATCH,
-                    message: '房间模式与请求模式不一致',
-                    actualMode: this.game.mode
-                });
-                this._notify('warning', '对方选择的模式与本房间不一致');
-                this._rejectSession({
-                    code: REJECT_CODES.MODE_MISMATCH,
-                    actualMode: this.game.mode,
-                    message: '对手选择的模式与本房间不一致'
-                }, { keepRoom: true });
-            } else {
-                this._send(TYPES.REJECT, {
-                    code: REJECT_CODES.MODE_MISMATCH,
-                    message: '房间模式不匹配'
-                });
-                this._rejectSession({
-                    code: REJECT_CODES.MODE_MISMATCH,
-                    actualMode: payload.mode,
-                    message: '房间模式不匹配'
-                });
-            }
-            return;
-        }
-
+        // 房主权威：棋种 / 尺寸 / 贴目 / 辅助开关以房主 HELLO 为准，访客在握手阶段自动采用
         if (this.role === 'guest') {
             this._applyRemoteSettings(payload);
         }
@@ -341,7 +315,7 @@ export class Session {
     }
 
     _applyRemoteSettings(payload) {
-        if (payload.size === this.game.size && payload.komi === this.game.settings.komi &&
+        if (payload.mode === this.game.mode && payload.size === this.game.size && payload.komi === this.game.settings.komi &&
             payload.assist === this.game.settings.assist && payload.undoLimit === this.game.settings.undoLimit) {
             return;
         }

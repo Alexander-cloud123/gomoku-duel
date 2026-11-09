@@ -31,7 +31,6 @@ export const TYPES = Object.freeze({
 
 export const REJECT_CODES = Object.freeze({
     ROOM_FULL: 'ROOM_FULL',
-    MODE_MISMATCH: 'MODE_MISMATCH',
     PROTO_MISMATCH: 'PROTO_MISMATCH',
     BUSY: 'BUSY'
 });
