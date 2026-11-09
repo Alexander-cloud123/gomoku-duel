@@ -63,13 +63,19 @@ function isPlainObject(value) {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-export function validateHelloPayload(p) {
-    if (!isPlainObject(p)) return 'payload';
+function validateSettingsFields(p) {
     if (!isMode(p.mode)) return 'mode';
     if (!isInt(p.size, 5, 19) || !isSizeForMode(p.mode, p.size)) return 'size';
     if (typeof p.komi !== 'number' || !Number.isFinite(p.komi) || p.komi < 0 || p.komi > 15) return 'komi';
     if (typeof p.assist !== 'boolean') return 'assist';
     if (!isInt(p.undoLimit, 0, 10)) return 'undoLimit';
+    return null;
+}
+
+export function validateHelloPayload(p) {
+    if (!isPlainObject(p)) return 'payload';
+    const settings = validateSettingsFields(p);
+    if (settings) return settings;
     if (!isInt(p.proto, 0, 99)) return 'proto';
     if (typeof p.name !== 'string' || p.name.length > MAX_NAME_LENGTH) return 'name';
     if (typeof p.playerId !== 'string' || p.playerId.length > 40) return 'playerId';
@@ -102,6 +108,48 @@ export function validateSnapshot(snapshot) {
     if (!isColor(snapshot.turn)) return 'snapshot.turn';
     if (snapshot.phase !== 'playing' && snapshot.phase !== 'scoring' && snapshot.phase !== 'finished' && snapshot.phase !== 'idle') {
         return 'snapshot.phase';
+    }
+    // 以下字段在 PROTOCOL《一致性》中属于快照的一部分：存在则严格校验，缺失由 Game.restore 取默认值
+    if (snapshot.koPoint !== undefined && snapshot.koPoint !== null) {
+        if (!isPlainObject(snapshot.koPoint) ||
+            !isInt(snapshot.koPoint.x, 0, snapshot.size - 1) ||
+            !isInt(snapshot.koPoint.y, 0, snapshot.size - 1)) {
+            return 'snapshot.koPoint';
+        }
+    }
+    const maxStones = snapshot.size * snapshot.size;
+    if (snapshot.captures !== undefined) {
+        if (!isPlainObject(snapshot.captures) ||
+            !isInt(snapshot.captures[BLACK], 0, maxStones) ||
+            !isInt(snapshot.captures[WHITE], 0, maxStones)) {
+            return 'snapshot.captures';
+        }
+    }
+    if (snapshot.passCount !== undefined && !isInt(snapshot.passCount, 0, 2)) return 'snapshot.passCount';
+    if (snapshot.deadStones !== undefined) {
+        if (!Array.isArray(snapshot.deadStones) || snapshot.deadStones.length > maxStones) return 'snapshot.deadStones';
+        for (const key of snapshot.deadStones) {
+            if (typeof key !== 'string' || !/^\d{1,2},\d{1,2}$/.test(key)) return 'snapshot.deadStones';
+            const [x, y] = key.split(',').map(Number);
+            if (x >= snapshot.size || y >= snapshot.size) return 'snapshot.deadStones';
+        }
+    }
+    if (snapshot.agreed !== undefined) {
+        if (!Array.isArray(snapshot.agreed) || snapshot.agreed.length > 2) return 'snapshot.agreed';
+        for (const color of snapshot.agreed) if (!isColor(color)) return 'snapshot.agreed';
+    }
+    if (snapshot.undoUsed !== undefined) {
+        if (!isPlainObject(snapshot.undoUsed) ||
+            !isInt(snapshot.undoUsed[BLACK], 0, 10) ||
+            !isInt(snapshot.undoUsed[WHITE], 0, 10)) {
+            return 'snapshot.undoUsed';
+        }
+    }
+    if (snapshot.settings !== undefined) {
+        if (!isPlainObject(snapshot.settings)) return 'snapshot.settings';
+        const settings = validateSettingsFields({ ...snapshot.settings, mode: snapshot.mode, size: snapshot.size });
+        if (settings === 'mode' || settings === 'size') return 'snapshot.settings';
+        if (settings) return `snapshot.settings.${settings}`;
     }
     return null;
 }
@@ -199,7 +247,8 @@ export function helloPayload(game, { name, playerId }) {
 
 export function isMessageTooLarge(data) {
     try {
-        return JSON.stringify(data).length > MAX_MESSAGE_BYTES;
+        const bytes = new TextEncoder().encode(JSON.stringify(data)).length;
+        return bytes > MAX_MESSAGE_BYTES;
     } catch {
         return true;
     }

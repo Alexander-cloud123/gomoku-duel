@@ -64,6 +64,7 @@
 - `seq` 缺口：访客发 `SYNC_REQUEST`，房主直接下发 `SYNC_STATE`
 - 房主收到 `SYNC_REQUEST` 时用当前 `Game.snapshot()` 与 `stateHash()` 回复；访客恢复后比对哈希
 - 快照包含 `cells / turn / moveHistory / captures / koPoint / passCount / phase / deadStones / agreed / undoUsed`
+- 上述字段存在时按类型与范围校验，缺失时由 `Game.restore` 取默认值（兼容旧客户端）
 - 快照中 `myColor` 由接收方覆盖，不使用对端身份
 
 ## 心跳与重连

@@ -85,6 +85,39 @@ test('消息体积上限可判定', () => {
     assert.equal(isMessageTooLarge({ v: 1, t: 'BIG', p: { pad: 'x'.repeat(70000) } }), true);
 });
 
+test('消息体积按 UTF-8 字节计算（中文不再漏判）', () => {
+    // 22000 个汉字：UTF-16 长度 22000 < 64KB，UTF-8 字节约 66000 > 64KB
+    const cjk = { v: 1, t: 'BIG', p: { pad: '汉'.repeat(22000) } };
+    assert.equal(isMessageTooLarge(cjk), true);
+    assert.equal(isMessageTooLarge({ v: 1, t: 'OK', p: { pad: '汉'.repeat(21000) } }), false);
+});
+
+test('快照校验覆盖 koPoint / captures / passCount / deadStones / agreed / undoUsed / settings', () => {
+    const game = new Game({ mode: MODES.GO, size: 9 });
+    game.start({ myColor: BLACK });
+    const snapshot = game.snapshot();
+    assert.equal(validateSnapshot(snapshot), null);
+
+    assert.equal(validateSnapshot({ ...snapshot, koPoint: { x: 9, y: 0 } }), 'snapshot.koPoint');
+    assert.equal(validateSnapshot({ ...snapshot, koPoint: { x: 0, y: -1 } }), 'snapshot.koPoint');
+    assert.equal(validateSnapshot({ ...snapshot, captures: { [BLACK]: -1, [WHITE]: 0 } }), 'snapshot.captures');
+    assert.equal(validateSnapshot({ ...snapshot, passCount: 3 }), 'snapshot.passCount');
+    assert.equal(validateSnapshot({ ...snapshot, deadStones: ['0,0', 'x,y'] }), 'snapshot.deadStones');
+    assert.equal(validateSnapshot({ ...snapshot, deadStones: ['0,9'] }), 'snapshot.deadStones');
+    assert.equal(validateSnapshot({ ...snapshot, agreed: [BLACK, 3] }), 'snapshot.agreed');
+    assert.equal(validateSnapshot({ ...snapshot, undoUsed: { [BLACK]: 11, [WHITE]: 0 } }), 'snapshot.undoUsed');
+    assert.equal(validateSnapshot({ ...snapshot, settings: { komi: -1, assist: true, undoLimit: 3 } }),
+        'snapshot.settings.komi');
+});
+
+test('快照缺失可选字段时仍可通过校验（兼容旧客户端）', () => {
+    const game = new Game({ mode: MODES.GOMOKU });
+    game.start({ myColor: BLACK });
+    const snapshot = game.snapshot();
+    const minimal = { mode: snapshot.mode, size: snapshot.size, cells: snapshot.cells, turn: snapshot.turn, moveHistory: snapshot.moveHistory, phase: snapshot.phase };
+    assert.equal(validateSnapshot(minimal), null);
+});
+
 test('拒绝码常量覆盖关键场景', () => {
     assert.ok(Object.values(REJECT_CODES).includes('ROOM_FULL'));
     assert.ok(Object.values(REJECT_CODES).includes('MODE_MISMATCH'));
