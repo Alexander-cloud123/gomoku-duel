@@ -4,13 +4,32 @@
 
 ## [Unreleased]
 
+### 新增
+
+- 文档链接与图片校验（`npm run check:docs`，纳入 `ci`）
+- 页面切换后焦点迁移（`page-focus` 锚点，含对局页屏幕阅读器标题）
+
 ### 变更
 
-- 仓库按企业开源规范整理：归档历史设计稿、补齐社区与合规文件、加入文档链接校验（`npm run check:docs`）
+- 联机标识改为房间号本身（去掉 `gomoku-` / `go-` 前缀），棋种由握手协商；**旧版本客户端需刷新页面后才能加入新房间**
+- 握手期拒绝（棋种/版本不符）只关闭本次连接，房主保留房间继续等待
+- 点目阶段禁止和棋与认输；断线期间认输返回 `not-connected`
+- 围棋 AI 使用位置超级劫（`historyKeys`）、增加连接评估，并按难度限制候选数量
+- `prefers-reduced-motion` 时同时关闭 Canvas 落子动画
+
+### 修复
+
+- `check:ids` 失败时退出非零（此前 CI 永远不会因此变红）
+- 信封 `v` 不一致现在回 `REJECT{PROTO_MISMATCH}` 并终止，而非静默丢弃
+- 快照补校验 `koPoint / captures / passCount / deadStones / agreed / undoUsed / settings`
+- 消息体积上限按 UTF-8 字节计算（中文不再漏判）
+- 新连接从 `seq = 0` 重新协商，修复房主复用会话时丢弃新访客 `HELLO` 的问题
+- `BYE` 仅在 `ready` 后接受，对齐握手白名单
+- 清理死代码、恒等表达式与未使用的拒绝码
 
 ### 文档
 
-- README 重写为规范结构，并加入界面截图
+- README 按企业规范重写并加入截图；PROTOCOL/ARCHITECTURE/TESTING 与实现同步
 
 ## [2.0.0] - 2026-11
 

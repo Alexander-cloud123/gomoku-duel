@@ -188,7 +188,7 @@ docs/
 npm run ci
 ```
 
-当前 62 项自动化用例，覆盖：
+当前 73 项自动化用例，覆盖：
 
 | 测试文件 | 覆盖 |
 | --- | --- |
@@ -197,10 +197,11 @@ npm run ci
 | `tests/game.test.mjs` | 回合校验、胜负、悔棋、认输、双虚手点目、快照恢复 |
 | `tests/notation.test.mjs` | 坐标记谱、棋盘尺寸、Zobrist |
 | `tests/protocol.test.mjs` | 版本、信封、载荷范围、快照校验、体积上限 |
-| `tests/session.test.mjs` | 握手、落子、去重、伪造消息、悔棋、认输、和棋、重开、点目、重连 |
-| `tests/ai.test.mjs` | 棋型识别、威胁、选点、堵四、时间预算、围棋合法性 |
+| `tests/session.test.mjs` | 握手、落子、去重、伪造消息、悔棋、认输、和棋、重开、点目、重连、模式切换 |
+| `tests/ai.test.mjs` | 棋型识别、威胁、选点、堵四、时间预算、围棋合法性、超级劫过滤 |
+| `tests/scripts.test.mjs` | `check-ids` 失败时必须退出非零 |
 
-联机会话测试使用内存传输，不依赖浏览器或 PeerJS；浏览器冒烟脚本见 [docs/TESTING.md](docs/TESTING.md)（14 项 UI 检查，真实 PeerJS 联机 10 项）。CI 在 Node 22 / 24 上执行 lint、页面 id 检查、文档链接检查与全部测试。
+联机会话测试使用内存传输，不依赖浏览器或 PeerJS；浏览器冒烟脚本见 [docs/TESTING.md](docs/TESTING.md)（16 项 UI 检查，真实 PeerJS 联机 10 项）。CI 在 Node 22 / 24 上执行 lint、页面 id 检查、文档链接检查与全部测试。
 
 ## 部署
 
