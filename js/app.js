@@ -798,9 +798,6 @@ function updateThinkingUI() {
     const thinking = app.localThinking || app.aiThinking;
     const el = $('thinking-indicator');
     if (el) el.hidden = !thinking;
-    if (app.board) {
-        // 思考时保持当前可交互状态，由 updateGameUI 控制
-    }
 }
 
 function updateAIPanel(result) {
@@ -907,11 +904,9 @@ function onGameOver(result) {
         : result.winner === app.game.myColor ? '你赢了！' : '你输了…';
     const reasonMap = {
         five: '五连成线',
-        resign: '对手认输' + (result.winner === app.game.myColor ? '' : ''),
         draw: '双方和棋',
         score: '数子定胜负',
-        full: '棋盘已满',
-        disconnect: '对手断开连接'
+        full: '棋盘已满'
     };
     const reasonText = result.reason === 'resign'
         ? (result.winner === app.game.myColor ? '对手认输' : '你已认输')

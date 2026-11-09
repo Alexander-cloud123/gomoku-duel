@@ -178,7 +178,8 @@ test('再来一局被拒绝时不重置，接受后双端重置', async () => {
     pair.hostSession.sendMove(7, 7);
     await waitFor(() => pair.guestGame.moveHistory.length === 1, 2000, '落子同步');
 
-    pair.hostSession.requestRestart();    await waitFor(() => pair.guestEvents.requests.length === 1, 2000, '访客收到重开请求');
+    pair.hostSession.requestRestart();
+    await waitFor(() => pair.guestEvents.requests.length === 1, 2000, '访客收到重开请求');
     pair.guestEvents.requests[0].respond(false);
     await delay(50);
     assert.equal(pair.hostGame.moveHistory.length, 1);
