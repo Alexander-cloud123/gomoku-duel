@@ -15,7 +15,7 @@
         <section id="page-home" class="page active" aria-label="首页">
             <div class="home-shell">
                 <header class="brand">
-                    <h1>棋盘对弈</h1>
+                    <h1 class="page-focus" tabindex="-1">棋盘对弈</h1>
                     <p>五子棋 · 围棋　支持点对点联机与本地 AI</p>
                 </header>
 
@@ -94,7 +94,7 @@
         <!-- 等待页 -->
         <section id="page-waiting" class="page" aria-label="等待对手">
             <div class="center-card">
-                <h2>等待对手加入</h2>
+                <h2 class="page-focus" tabindex="-1">等待对手加入</h2>
                 <div id="waiting-mode" class="mode-badge">五子棋</div>
                 <div class="room-block">
                     <span class="room-label">房间号</span>
@@ -113,7 +113,7 @@
         <!-- 加入页 -->
         <section id="page-join" class="page" aria-label="加入房间">
             <div class="center-card">
-                <h2>加入房间</h2>
+                <h2 class="page-focus" tabindex="-1">加入房间</h2>
                 <p class="hint">输入房主给出的 6 位房间号</p>
                 <input id="input-room" class="input-room" type="text" maxlength="8" autocomplete="off"
                        inputmode="latin" placeholder="例如 ABC234" aria-label="房间号">
@@ -126,6 +126,7 @@
 
         <!-- 对局页 -->
         <section id="page-game" class="page" aria-label="对局">
+            <h1 class="sr-only page-focus" tabindex="-1">对局</h1>
             <header class="game-header">
                 <span id="game-room-name" class="game-room-name">联机对战</span>
                 <span id="conn-status" class="conn-status status-ok">已连接</span>

@@ -150,6 +150,7 @@ async function main() {
     await evaluate('document.getElementById("select-difficulty").value = "medium"; document.getElementById("select-difficulty").dispatchEvent(new Event("change"))');
     await evaluate('document.getElementById("btn-start-local").click()');
     await poll('document.getElementById("page-game").classList.contains("active")', 5000, '进入围棋对局');
+    assert(await evaluate('document.activeElement && document.getElementById("page-game").contains(document.activeElement)'), '切页后焦点进入对局页');
     await poll('document.getElementById("board").getBoundingClientRect().width > 300', 5000, '棋盘尺寸计算');
     await poll(`(() => {
         const c = document.getElementById('board');
@@ -195,6 +196,7 @@ async function main() {
     // ===== 人机（五子棋） =====
     await evaluate('document.getElementById("btn-back-home").click()');
     await poll('document.getElementById("page-home").classList.contains("active")', 5000, '返回首页');
+    assert(await evaluate('document.querySelector("#page-home .page-focus") === document.activeElement'), '返回首页后焦点落在页面标题');
     await evaluate('document.getElementById("btn-mode-gomoku").click()');
     await evaluate('document.getElementById("btn-start-local").click()');
     await poll('document.getElementById("page-game").classList.contains("active")', 5000, '进入五子棋对局');
